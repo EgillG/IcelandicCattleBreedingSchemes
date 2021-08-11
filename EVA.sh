@@ -10,11 +10,6 @@
 #SBATCH --output=slurm_%x_%A.out   # STDOUT
 #SBATCH --error=slurm_%x_%A.err    # STDERR
 #SBATCH -t 1:00:00              # Job max time - Format = MM or MM:SS or HH:MM:SS or DD-HH or DD-HH:MM
-# Create a temporary directory for the job in local storage - DO NOT CHANGE #
-
-TMPDIR=/scratch/$USER/$SLURM_JOBID
-export TMPDIR
-mkdir -p $TMPDIR
 
 # wd is working drive
 wd=$(pwd)
@@ -23,29 +18,29 @@ method=${2?Error: method not given}
 NumBulls=${3?Error: number of bulls not given}
 echo $replicate $method $NumBulls
 
-if [ $method == "G1" ] || [ $method == "G2" ] || [ $method == "G3" ]
-then
-echo $method starting GMATRIX
-python3 gmatPar.py $wd $method
-
-echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
-
-JOBNAME=IceGmat
-PARFILE=Gmatrix/gmat.par
-PROG=/usr/home/qgg/gs/public/invg-md-all-v8/invgmatrix
-
 TMPDIR=/scratch/$USER/$SLURM_JOBID
 export TMPDIR
 mkdir -p $TMPDIR
 
+if [ $method == "M1" ] || [ $method == "M2" ] || [ $method == "M1D" ] || [ $method == "M2D" ] || [ $method == "M1D_Est" ] || [ $method == "M2D_Est" ] || [ $method == "M1R" ] || [ $method == "M2R" ]
+then
+echo method $method starting GMATRIX
+python3 gmatPar.py $wd $method
 
+echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
+
+JOBNAME=IceSim
+PARFILE=$SLURM_SUBMIT_DIR/Gmatrix/gmat.par
+PROG=/usr/home/qgg/gs/public/invg-md-all-v8/invgmatrix
+
+cp $PROG $TMPDIR/invgmatrix
 cp $PARFILE $TMPDIR/par.dat
-cp $PROG     $TMPDIR/invgmatrix
 
-cd $TMPDIR
-
+cd $TMPDIR/
+echo running GMATRIX
 ulimit -s unlimited
-./invgmatrix > $SLURM_SUBMIT_DIR/$JOBNAME.lst
+echo $SLURM_SUBMIT_DIR
+./invgmatrix
 
 cd $SLURM_SUBMIT_DIR
 rm -rf /scratch/$USER/$SLURM_JOBID
@@ -59,27 +54,24 @@ python3 Haplotpes_MoBOPS_8_15_02_2021.py $method
 
 echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
 
-JOBNAME=IceGmat
-PARFILE=gmat.par
+JOBNAME=IceSim
+PARFILE=$SLURM_SUBMIT_DIR/Gmatrix/gmat.par
 PROG=/usr/home/qgg/gs/public/invg-md-all-v8/invgmatrix
 
-TMPDIR=/scratch/$USER/$SLURM_JOBID
-export TMPDIR
-mkdir -p $TMPDIR
-
-
+cp $PROG $TMPDIR/invgmatrix
 cp $PARFILE $TMPDIR/par.dat
-cp $PROG     $TMPDIR/invgmatrix
 
-cd $TMPDIR
-
+cd $TMPDIR/
+echo running GMATRIX
 ulimit -s unlimited
-./invgmatrix > $SLURM_SUBMIT_DIR/$JOBNAME.lst
+echo $SLURM_SUBMIT_DIR
+./invgmatrix
 
 cd $SLURM_SUBMIT_DIR
 rm -rf /scratch/$USER/$SLURM_JOBID
 
 echo "Gmatrix Job completed at $(date '+%y-%m-%d %H:%M:%S')"
+
 fi
 
 # This program makes the EVA.prm file
@@ -87,6 +79,3 @@ python3 EVApar.py $method $NumBulls $wd
 
 prg=/opt/ghpc/eva/bin/eva
 $prg EVA.prm
-
-cd $SLURM_SUBMIT_DIR
-rm -rf /scratch/$USER/$SLURM_JOBID

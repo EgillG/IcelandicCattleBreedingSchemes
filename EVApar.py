@@ -34,9 +34,9 @@ par = "&DataParameters \n\
   TimeSteps = 0\n\
 / \n\
 &OCSParameters \n\
-  nmatings         = 1000,\n\
-  w_merit          = -100.0,\n\
-  w_relationship   = 100,\n\
+  nmatings         = 100,\n\
+  w_merit          = 0,\n\
+  w_relationship   = 0,\n\
   LimitMaleMatings = 1,\n\
   W_nMales = -10000,\n\
   NSelectedMales = " + numBulls + " \n\

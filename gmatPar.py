@@ -13,8 +13,18 @@ print(pwd)
 outname= pwd + "/gmat.par"
 if not os.path.exists("Gmatrix"):
     os.mkdir("Gmatrix")
+if method[1] == "1":
+    scalemtd = 1
+elif method[1] == "2":
+    scalemtd = 2
+    
+if len(method) > 2:
+    freqmtd = 11
+else:
+    freqmtd = 1
 par = "$MAPFILE \n" + '\"' + pwd + "/gmat.map\" \n\
 $MARKERFILE \n" + '\"' + pwd + "/gmat.dat\" \n\
+$MAPBASEFILE \n" + '\"' + pwd + "/mapbase.dat\" \n\
 $IDFILE \n" + '\"' + pwd + "/gmat.id\" \n\
 $GMATRIXFILE \n" + '\"' + pwd + "/gmat\" \n\
 $IGMATRIXFILE \n" + '\"' + pwd + "/invgmat\"\n\n\
@@ -31,10 +41,10 @@ $MISSGENOTYPE\n\
 9\n\
 $MINMAF\n\
 0.01\n\
-$FREQMETHOD\n\
-1\n\
-$SCALEMETHOD\n\
-1\n\
+$FREQMETHOD\n" + \
+str(freqmtd) + "\n\
+$SCALEMETHOD\n" + \
+str(scalemtd) + "\n\
 $DIAG_ADD\n\
 0.01\n\
 $G_ADD\n\

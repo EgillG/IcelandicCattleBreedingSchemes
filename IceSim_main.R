@@ -1,7 +1,8 @@
-# Founder generation has been taken care of
+# Updated 11.08.2021 with numerous fixes
+# Can use marker-based matrices and pedigree
+# Fixed the funcSegQTL function
+# Uses bulls equally in each generation.
 # Writes relevant parameters (some of them) to a matrix, info.
-# Phenotypes are provided for parents of selection candidates
-#
 # 
 library(MoBPS)
 library(stringr)
@@ -69,16 +70,22 @@ func <- function(x) {
 }
 # This function does the same as before, but on different data, so it counts whether
 # number of animals homozygous for one QTL allele is equal to the number of loci
-funcSegQTL <- function(x, y){
-  # x is the input and y is the number of QTL in the simulation
-  #   If x equals y return 0, which means the QTL is fixed.
-  if (x[1] == y) {
+funcSegQTL <- function(x){
+  # x is the input frequencies (homo1,hetero,homo2)
+  # If homo1 and hetero is 0, return 0, or if 
+  # hetero and homo2 is 0, return 0
+  # which means the QTL is fixed.
+  if (x[1] == 0 | x[2] == 0) {
+    return(0)
+  }
+  else if (x[2] == 0 | x[3] == 0) {
     return(0)
   }
   else {
     return(1)
   }
 }
+
 
 # return minor allele frequency from vector of frequencies.
 funcMaf <- function(x){
@@ -231,7 +238,7 @@ print(c("mean heterozygosity of QTL, gen:", paste(1), paste(mean(sum(mrg$Hetero)
 info[1, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
 freq1=data.frame(mrg[,c(2,8)])
 freq2=data.frame(mrg[,c(4,9)])
-afi <- apply(mrg[,c(5,7)], MARGIN = 1, FUN = funcSegQTL, y = qtl)
+afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
 sum(afi)
 info[1, 5] <- sum(afi)/qtl
 # compute total heterozygosity of markers and number of fixed alleles
@@ -300,7 +307,7 @@ for(gen in 1:Pblupgen+1){
                                  selection.m.cohorts = paste("SelectedBulls",gen-1, sep=""),
                                  selection.criteria = "bve",
                                  share.genotyped = 0,
-#                                 max.mating.pair = 2,
+                                 max.mating.pair = 2,
 #                                 max.offspring = c(breedSize/SelMales,2),
                                  store.effect.freq = TRUE)
 
@@ -328,7 +335,7 @@ for(gen in 1:Pblupgen+1){
         info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
         freq1=data.frame(mrg[,c(2,8)])
         freq2=data.frame(mrg[,c(4,9)])
-        afi <- apply(mrg[,c(5,7)], MARGIN = 1, FUN = funcSegQTL, y = qtl)
+        afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
         sum(afi)
         info[gen, 5] <- sum(afi)/qtl
         # compute total heterozygosity of markers and number of fixed alleles
@@ -480,15 +487,11 @@ write.table(evaIn, "evaIn.txt",
             row.names = FALSE, col.names = FALSE)
 
 # Write genotypes if marker-based GMATRIX is used
-if (substr(args[2],1,1) == "G") { 
+  if (substr(args[2],1,1) == "M") { 
+    # Here I retrieve the genotypes of desired cohorts
     genos = t(get.geno(population, 
                        cohorts = cohorts[-c(2,4,6,8,10)],
                        non.genotyped.as.missing = TRUE))
-    # This step could be left out, and genotype coding used
-    # genos[genos == 0] <- "1 1"
-    # genos[genos == 1] <- "1 2"
-    # genos[genos == 2] <- "2 2"
-    ##############################################
     genos = data.frame(genos)
     genos$ID <- row.names(genos)
     # Assign correct recoded IDs
@@ -498,7 +501,7 @@ if (substr(args[2],1,1) == "G") {
                                 warn_missing = FALSE)
     # Move ID columns to the front.
     genos <- genos %>% relocate(RecodeID,ID, .before = X1)
-    #genos[1:10,1:10]
+    # Set missing genotypes to 9 (these are effect markers)
     genos[is.na(genos)] <- 9
     write.table(genos,"gmat.dat", 
                 row.names = FALSE, 
@@ -506,39 +509,18 @@ if (substr(args[2],1,1) == "G") {
                 quote = FALSE, 
                 sep = " ")
     # make mapfile for GMATRIX
-    # First compute frequencies in 
-    genotype.check <- get.geno(population, gen = length(population$breeding)-1)
-    p_i <- rowMeans(genotype.check)/2
-    for (j in 1:length(p_i)) {
-      p_i[j] <- funcMaf(p_i[j])
-    }
-    summary(p_i)
-    
-    fixSeg <- apply(matrix(p_i), MARGIN = 1, FUN = funcMaf)
-    
-    if (args[2] == "G1") {
-      mapfile = cbind(seq(1,population$info$snp[1]*population$info$chromosome),rep(0,population$info$snp[1]*population$info$chromosome))
+    # mapfile is simply the number of snps and a 0 or 1, depending on whether
+    # the marker is genotyped or not
+      mapfile = cbind(seq(1,population$info$snp[1]*population$info$chromosome),
+                      rep(0,population$info$snp[1]*population$info$chromosome))
+      # This loop checks whether the marker is genotyped
+      # (I know that there is a more efficient way)
       for (i in 1:dim(mapfile)[1]) {
         if (markerIncluded[i]) {
           mapfile[i,2] <- 1
         }
-        
       }
-    }
-    
-    if (args[2] == "G2") {
-    mapfile = cbind(seq(1,population$info$snp[1]*population$info$chromosome),rep(0,population$info$snp[1]*population$info$chromosome))
-    for (i in 1:dim(mapfile)[1]) {
-        if (markerIncluded[i] | p_i[i] == 0) {
-          mapfile[i,2] <- 1
-        }
-          else if (markerIncluded[i] | p_i[i] != 0) {
-            mapfile[i,2] <- 1/p_i[i]**0.5
-        }
-    }
-    }
-    
-    write.table(mapfile, 
+    write.table(cbind(mapfile,rep(1,dim(mapfile)[1])), 
                 "gmat.map",
                 row.names = FALSE, 
                 col.names = FALSE,
@@ -546,6 +528,7 @@ if (substr(args[2],1,1) == "G") {
                 sep = " ")
     # Make id file for GMATRIX
     idfile <- cbind(genos$RecodeID,genos$RecodeID,rep(1,length(genos$RecodeID)))
+    # Should this code not be run? I don't remember what it does
     # genotyped = get.genotyped(population, gen=1:length(population$breeding))
     # for (i in 1:dim(idfile)[1]) {
     #   if (genotyped[i]) {
@@ -558,7 +541,48 @@ if (substr(args[2],1,1) == "G") {
                 col.names = FALSE,
                 quote = F,
                 sep = " ")
-}
+    if (args[2] == "M1D" || args[2] == "M2D") {
+      # find the frequency of alleles in the base generation.
+      freqfile <-  get.geno(population, gen = 1, non.genotyped.as.missing = FALSE)
+      # rowMeans can be used to compute allele frequencies (for the larger allele)
+      freq <- rowMeans(freqfile)/2
+      write.table(freq, 
+                  "mapbase.dat",
+                  row.names = TRUE, 
+                  col.names = FALSE,
+                  quote = F,
+                  sep = " ")
+    }
+    if (args[2] == "M1D_Est" || args[2] == "M2D_Est") {
+      # Now use the genotypes of older bulls. This uses the first three
+      # generations, should perhaps be changed.
+      freqfile <-  get.geno(population, 
+                            cohorts = c(cohorts[c(1,3,5)]),
+                            non.genotyped.as.missing = FALSE)
+      # rowMeans can be used to compute allele frequencies (for the larger allele)
+      freq <- rowMeans(freqfile)/2
+      write.table(freq, 
+                  "mapbase.dat",
+                  row.names = TRUE, 
+                  col.names = FALSE,
+                  quote = F,
+                  sep = " ")
+    }
+    
+    if (args[2] == "M1R" || args[2] == "M2R") {
+      freqfile <-  get.geno(population, 
+                            cohorts = c(cohorts[cohIndex-1],cohorts[cohIndex-2]),
+                            non.genotyped.as.missing = FALSE)
+      # rowMeans can be used to compute allele frequencies (for the larger allele)
+      freq <- rowMeans(freqfile)/2
+      write.table(freq, 
+                  "mapbase.dat",
+                  row.names = TRUE, 
+                  col.names = FALSE,
+                  quote = F,
+                  sep = " ")
+    }    
+  }
 
 # Write the haplotypes of genotyped animals if method is haplotype-based.
 # Here I have to take care of cohorts.
@@ -585,10 +609,17 @@ print(paste("her er eg fyrir OCS urval, kynslod:", gen))
 # Assign huge breeding value estimate to selected bulls.
 dfBVE = cbind(df$txt, 1e9)
 population <- insert.bve(population, bves = dfBVE)
+
+##############################################################
+# Make R Data file. This is temporary
+RDataFile <- paste(args[2],"_",args[1],"TempStuff.RData",sep="")
+save.image(file=RDataFile)
+##############################################################
+
 population <- breeding.diploid(population, 
                                breeding.size = breedSize,
                                name.cohort = paste("ssGBLUP",gen, sep=""),
-                               selection.size = c(SelMales,1000),
+                               selection.size = c(SelMales,SelFemales),
                                heritability = 0.4,
                                selection.f.cohorts = cohorts[cohIndex-1],
                                selection.m.cohorts = cohorts[cohIndex-2],
@@ -597,9 +628,11 @@ population <- breeding.diploid(population,
                                max.offspring = c(breedSize/SelMales,2))
 # Here I can decide whether to make new cohort of selected bulls,
 # to replace the cohort of genotyped bulls.
-a <- get.pedigree(population, gen=2, raw=TRUE)
-hist(a[,9], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of use for each sire")
+a <- get.pedigree(population, cohorts = get.cohorts(population)[c(length(get.cohorts(population))-1,length(get.cohorts(population))-2)], raw=TRUE)
+png(paste(args[2],"_",args[1],gen,".png",sep=""))
 
+hist(a[,6], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of use for each sire")
+dev.off()
 	print(paste("write genomic information for generation",gen, sep = " "))
         df=data.frame(get.effect.freq(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2])))
         # info$real.bv.add : Lists with an overview of all single marker QTLs for each trait
@@ -624,7 +657,7 @@ hist(a[,9], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of u
         info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
         freq1=data.frame(mrg[,c(2,8)])
         freq2=data.frame(mrg[,c(4,9)])
-        afi <- apply(mrg[,c(5,7)], MARGIN = 1, FUN = funcSegQTL, y = qtl)
+        afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
         sum(afi)
         info[gen, 5] <- sum(afi)/qtl
         # compute total heterozygosity of markers and number of fixed alleles
