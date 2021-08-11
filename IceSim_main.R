@@ -453,7 +453,7 @@ ped$Generation = as.integer(ped$Generation)
 # generation gen, and to 0 for bulls with ebv lower than mean ebv
 # Make a column maxmatings. Start by assigning all animals in the current 
 # generation to MaxMate
-ped[ped$Generation == gen-1,]$maxmatings = MaxMate
+ped[ped$Generation == gen-1,]$maxmatings = 0
 # Assign females in current generation to 1 mating
 ped[ped$Generation == gen-1 & ped$sex == "2",]$maxmatings = 1
 # make matrix of ebvs.
@@ -462,9 +462,10 @@ bve <- get.bve(population, cohorts = cohorts)
 # Use merge to combine ped and bve.
 evaIn <- merge(ped, data.frame(t(bve)), by.x = "offspring", by.y = "row.names", sort = F, all.x = TRUE)
 evaIn$maxmatings=as.character(evaIn$maxmatings)
-# Apply truncation selection here on the GEBVs, only 20% best bulls are selected 
-# for input to OCS.
-evaIn[evaIn$sex==1 & evaIn$Trait.1<quantile(evaIn[evaIn$Generation==gen-1 & evaIn$sex==1,]$Trait.1,0.75),]$maxmatings = 0
+# Select bulls with GEBVs for input to OCS.
+#evaIn[evaIn$sex==1 & evaIn$Trait.1<quantile(evaIn[evaIn$Generation==gen-1 & evaIn$sex==1,]$Trait.1,0.75),]$maxmatings = 0
+evaIn[(dim(evaIn)[1]-breedSize/4):(dim(evaIn)[1]),]$maxmatings = MaxMate
+
 
 #Big <- merge(ped, data.frame(t(pheno)), by.x = "offspring", by.y = "row.names", sort = F)
 tail(evaIn)
