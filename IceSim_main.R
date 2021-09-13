@@ -3,6 +3,7 @@
 # Fixed the funcSegQTL function
 # Uses bulls equally in each generation.
 # Writes relevant parameters (some of them) to a matrix, info.
+# SegAlleles currently does not work
 # 
 library(MoBPS)
 library(stringr)
@@ -49,9 +50,12 @@ Pblupgen = 5
 ssGBLUPgen = 5
 
 # Matrix for storing results of genetic gain, heterozygosity and inbreeding.
-info = matrix(nrow = (Pblupgen + ssGBLUPgen+1), ncol  = 5)
+info = matrix(nrow = (Pblupgen + ssGBLUPgen+1), ncol  = 6)
 info=data.frame(info)
-colnames(info) = c("BV", "Coancestry","Heteroz", "SegAlleles", "SegQTL")
+colnames(info) = c("BV", "Coancestry","Heteroz", "SegAlleles", "SegQTL", "DriftVar")
+# Matrix for storing allele frequency changes for computing drift variance
+# (variance of allele frequency changes)
+p = matrix(nrow = (Pblupgen + ssGBLUPgen+1), ncol  = qtl)
 
 #####################
 #define functions
@@ -75,10 +79,10 @@ funcSegQTL <- function(x){
   # If homo1 and hetero is 0, return 0, or if 
   # hetero and homo2 is 0, return 0
   # which means the QTL is fixed.
-  if (x[1] == 0 | x[2] == 0) {
+  if (x[1] == 0 & x[2] == 0) {
     return(0)
   }
-  else if (x[2] == 0 | x[3] == 0) {
+  else if (x[2] == 0 & x[3] == 0) {
     return(0)
   }
   else {
@@ -233,6 +237,7 @@ mrg = merge(effects, df, by = "X1")
 mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
 mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
 colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
+p[1,] <- mrg$freq0
 # pring mean heterozygosity and store in info matrix.
 print(c("mean heterozygosity of QTL, gen:", paste(1), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
 info[1, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
@@ -330,6 +335,8 @@ for(gen in 1:Pblupgen+1){
         mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
         mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
         colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
+        p[gen,] <- mrg$freq0
+        info[gen,6] <- var(p[gen,]-p[gen-1,])
         # print mean heterozygosity and store in info matrix.
         print(c("mean heterozygosity of QTL, gen:", paste(gen), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
         info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
@@ -381,6 +388,8 @@ sbla = seq(2,2,length.out = (length(MoBPSGen)%/%2))
 # build the vector using rep.
 ve = rep(1:(length(MoBPSGen)%/%2), times = sbla)
 gen=7
+print("Info matrix looks like this before ssGBLUP stage:\n")
+print(info)
 # 
 ###############################################################################
 # Start of genomic selection
@@ -462,9 +471,9 @@ bve <- get.bve(population, cohorts = cohorts)
 # Use merge to combine ped and bve.
 evaIn <- merge(ped, data.frame(t(bve)), by.x = "offspring", by.y = "row.names", sort = F, all.x = TRUE)
 evaIn$maxmatings=as.character(evaIn$maxmatings)
-# Apply truncation selection here on the GEBVs, only 20% best bulls are selected 
-# for input to OCS.
-evaIn[evaIn$sex==1 & evaIn$Trait.1<quantile(evaIn[evaIn$Generation==gen-1 & evaIn$sex==1,]$Trait.1,0.75),]$maxmatings = 0
+# Apply truncation selection here on the GEBVs, only 20% best bulls are selecte
+# This simply takes the last breedsize/4 number of bulls in the evaIn file (which should be the genotyped bulls)
+evaIn[(dim(evaIn)[1]-breedSize/4):(dim(evaIn)[1]),]$maxmatings = MaxMate
 
 #Big <- merge(ped, data.frame(t(pheno)), by.x = "offspring", by.y = "row.names", sort = F)
 tail(evaIn)
@@ -546,7 +555,7 @@ write.table(evaIn, "evaIn.txt",
       freqfile <-  get.geno(population, gen = 1, non.genotyped.as.missing = FALSE)
       # rowMeans can be used to compute allele frequencies (for the larger allele)
       freq <- rowMeans(freqfile)/2
-      write.table(freq, 
+      write.table(freq[freq!=0], 
                   "mapbase.dat",
                   row.names = TRUE, 
                   col.names = FALSE,
@@ -561,7 +570,7 @@ write.table(evaIn, "evaIn.txt",
                             non.genotyped.as.missing = FALSE)
       # rowMeans can be used to compute allele frequencies (for the larger allele)
       freq <- rowMeans(freqfile)/2
-      write.table(freq, 
+      write.table(freq[freq!=0], 
                   "mapbase.dat",
                   row.names = TRUE, 
                   col.names = FALSE,
@@ -575,7 +584,7 @@ write.table(evaIn, "evaIn.txt",
                             non.genotyped.as.missing = FALSE)
       # rowMeans can be used to compute allele frequencies (for the larger allele)
       freq <- rowMeans(freqfile)/2
-      write.table(freq, 
+      write.table(freq[freq!=0], 
                   "mapbase.dat",
                   row.names = TRUE, 
                   col.names = FALSE,
@@ -596,8 +605,9 @@ write.table(haplo,"haplo.txt", row.names = FALSE,
 }
 system(paste("bash EVA.sh",args[1],args[2],args[3],sep = " "))
 
+EVAfilename = paste(args[2],"_evaSim/Candidates.txt",sep="")
 # Read the Candidates.txt file from EVA
-df <- read.table("evaSim/Candidates.txt", skip = 6, header = T, nrows = breedSize)
+df <- read.table(EVAfilename, skip = 6, header = T, nrows = breedSize)
 
 # Select males
 df<- df[df$Sex == 1,]
@@ -612,7 +622,7 @@ population <- insert.bve(population, bves = dfBVE)
 
 ##############################################################
 # Make R Data file. This is temporary
-RDataFile <- paste(args[2],"_",args[1],"TempStuff.RData",sep="")
+RDataFile <- paste(args[2],"/gen",gen,args[2],"_",args[1],"TempStuff.RData",sep="")
 save.image(file=RDataFile)
 ##############################################################
 
@@ -629,7 +639,7 @@ population <- breeding.diploid(population,
 # Here I can decide whether to make new cohort of selected bulls,
 # to replace the cohort of genotyped bulls.
 a <- get.pedigree(population, cohorts = get.cohorts(population)[c(length(get.cohorts(population))-1,length(get.cohorts(population))-2)], raw=TRUE)
-png(paste(args[2],"_",args[1],gen,".png",sep=""))
+png(paste(args[2],"/",args[2],"_",args[1],gen,".png",sep=""))
 
 hist(a[,6], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of use for each sire")
 dev.off()
@@ -652,6 +662,8 @@ dev.off()
         mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
         mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
         colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
+        p[gen,] <- mrg$freq0
+        info[gen,6] <- var(p[gen,]-p[gen-1,])
         # print mean heterozygosity and store in info matrix.
         print(c("mean heterozygosity of QTL, gen:", paste(gen), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
         info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
@@ -715,8 +727,13 @@ plot(info$Heteroz)
 dev.off()
 
 png(paste(args[2],"_",args[1],"_SegAlleles.png",sep=""))
-plot(info$Coancestry)
+plot(info$SegQTL)
 dev.off()
+
+png(paste(args[2],"_",args[1],"_DriftVariance.png",sep=""))
+plot(info$DriftVar)
+dev.off()
+
 
 qt <- get.qtl.variance(population, gen = 1:length(population$breeding))
 qt=data.frame(qt)
@@ -724,3 +741,5 @@ tail(qt)
 head(qt)
 write.table(qt, paste(args[2],"_",args[1],"_qt.txt",sep=""), quote = F, sep = "\t")
 write.table(info, file = paste(args[2],"_",args[1],"_info.txt",sep=""))
+
+write.table(p, file = paste(args[2],"_",args[1],"_p.txt",sep=""))

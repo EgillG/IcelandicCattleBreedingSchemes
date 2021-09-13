@@ -26,7 +26,10 @@ if [ $method == "M1" ] || [ $method == "M2" ] || [ $method == "M1D" ] || [ $meth
 then
 echo method $method starting GMATRIX
 python3 gmatPar.py $wd $method
+awk 'substr($2,1,1)!= e' mapbase.dat > temp
+mv temp mapbase.dat
 
+mv gmat.dat gmat.id gmat.map mapbase.dat $SLURM_SUBMIT_DIR/Gmatrix/
 echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
 
 JOBNAME=IceSim
@@ -73,9 +76,9 @@ rm -rf /scratch/$USER/$SLURM_JOBID
 echo "Gmatrix Job completed at $(date '+%y-%m-%d %H:%M:%S')"
 
 fi
-
+mv Gmatrix/gmat Gmatrix.gmat
 # This program makes the EVA.prm file
 python3 EVApar.py $method $NumBulls $wd
 
 prg=/opt/ghpc/eva/bin/eva
-$prg EVA.prm
+$prg ${method}/EVA.prm
