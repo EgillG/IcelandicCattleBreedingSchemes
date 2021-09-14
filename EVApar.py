@@ -16,7 +16,7 @@ if method == "Ped":
     fileG = 'pedigree'
 else:
         fileG = 'file'
-outname= wd + "/" method + "/EVA.prm"
+outname= wd + "/" + method + "/EVA.prm"
 if not os.path.exists("Gmatrix"):
     os.mkdir("Gmatrix")
 if not os.path.exists(method+"/_evaSim"):
