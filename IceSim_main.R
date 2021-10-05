@@ -18,9 +18,8 @@ library(dplyr)
 # Set working drive
 rm(list=ls())
 args = commandArgs(trailingOnly=TRUE)
-#args = c("Ped","G1","G2","G3","H1","H2","H3")[2]
+# args are: no. of repetition, method, number of selected bulls/generation
 print(args)
-#args = c("1","G2")
 # load QMSim data. 
 # 
 # Set Minor allele frequency threshold for G2 and G3
@@ -31,7 +30,7 @@ QTLMaf <- 0.5
 #Number of QTL
 qtl = 1000
 # Number of offspring each generation
-breedSize = 5000
+breedSize = 10000
 # Number of males and females selected each generation
 SelMales=as.integer(args[3])
 SelFemales=breedSize/2
@@ -102,12 +101,14 @@ funcMaf <- function(x){
   }
 
 }
-
-map <- as.matrix(read.table("../QMSim/data.map"))
-ped <- as.matrix(read.table("../QMSim/data.ped"))
+mapfile = paste("../../QMSim/data_",args[1],".map",sep="")
+pedfile = paste("../../QMSim/data_",args[1],".ped",sep="")
+freqfile = paste("../../QMSim/plink_",args[1],".frq",sep="")
+map <- as.matrix(read.table(mapfile))
+ped <- as.matrix(read.table(pedfile))
 
 # read .frq file:
-frq <- read.table("../QMSim/plink.frq")
+frq <- read.table(freqfile)
 # write SNP and chromosome number to a dataframe QTLsnp.
 QTLsnp = frq[,c(1,2,3,4,5)]
 # Make some filtering on allele frequencies for QTL
@@ -605,7 +606,7 @@ write.table(haplo,"haplo.txt", row.names = FALSE,
 }
 system(paste("bash EVA.sh",args[1],args[2],args[3],sep = " "))
 
-EVAfilename = paste(args[2],"_evaSim/Candidates.txt",sep="")
+EVAfilename = paste("evaSim/Candidates.txt",sep="")
 # Read the Candidates.txt file from EVA
 df <- read.table(EVAfilename, skip = 6, header = T, nrows = breedSize)
 
@@ -622,8 +623,8 @@ population <- insert.bve(population, bves = dfBVE)
 
 ##############################################################
 # Make R Data file. This is temporary
-RDataFile <- paste(args[2],"/gen",gen,args[2],"_",args[1],"TempStuff.RData",sep="")
-save.image(file=RDataFile)
+#RDataFile <- paste(args[2],"/gen",gen,args[2],"_",args[1],"TempStuff.RData",sep="")
+#save.image(file=RDataFile)
 ##############################################################
 
 population <- breeding.diploid(population, 
@@ -639,7 +640,7 @@ population <- breeding.diploid(population,
 # Here I can decide whether to make new cohort of selected bulls,
 # to replace the cohort of genotyped bulls.
 a <- get.pedigree(population, cohorts = get.cohorts(population)[c(length(get.cohorts(population))-1,length(get.cohorts(population))-2)], raw=TRUE)
-png(paste(args[2],"/",args[2],"_",args[1],gen,".png",sep=""))
+png(paste(args[2],"_",args[2],"_",args[1],gen,".png",sep=""))
 
 hist(a[,6], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of use for each sire")
 dev.off()
@@ -702,7 +703,6 @@ cohIndex =+ cohIndex+2
 print(paste("end of generation",gen, sep = " "))      
 }
 summary(population)
-setwd(args[2])
 RDataFile <- paste(args[2],"_",args[1],".RData",sep="")
 save.image(file=RDataFile)
 
