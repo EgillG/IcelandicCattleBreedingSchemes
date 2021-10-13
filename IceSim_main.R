@@ -596,13 +596,26 @@ write.table(evaIn, "evaIn.txt",
 
 # Write the haplotypes of genotyped animals if method is haplotype-based.
 # Here I have to take care of cohorts.
-if (substr(args[2],1,1) == "H") { 
+if (substr(args[2],1,1) == "H") {
 haplo=get.haplo(population, cohorts = cohorts[-c(2,4,6,8,10)],
                 non.genotyped.as.missing = TRUE)
 haplo[is.na(haplo)] <- 9
 print("Writing haplotypes")
-write.table(haplo,"haplo.txt", row.names = FALSE, 
+write.table(haplo,"haplo.hap", row.names = FALSE, col.names = FALSE,
              quote = FALSE, sep = "\t")
+# Use stringr to replace _set1 and _set2 with ""
+id=colnames(haplo)
+id=str_replace(id,"_set[1-2]","")
+# Write sample IDs
+write.table(unique(id),"haplo.sample", row.names = FALSE, col.names = FALSE,
+            quote = FALSE, sep = "\t")
+# Make and write genetic map
+ma=get.map(population)
+ma=data.frame(ma[,1],ma[,2], population$info$snp.position,"A","C")
+write.table(ma, "haplo.map", row.names = FALSE, col.names = FALSE,
+            quote = FALSE, sep = "\t")
+rm(ma)
+rm(haplo)
 }
 system(paste("bash EVA.sh",args[1],args[2],args[3],sep = " "))
 
