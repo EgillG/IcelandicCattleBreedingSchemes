@@ -44,9 +44,10 @@ NeutralMarkers = 500
 #MaxMate=2000
 MaxMate=breedSize/SelMales
 # number of generations for PBLUP
+# Pblupgen needs to be 5. Do not change.
 Pblupgen = 5
 #ssGBLUP
-ssGBLUPgen = 5
+ssGBLUPgen = 15
 
 # Matrix for storing results of genetic gain, heterozygosity and inbreeding.
 info = matrix(nrow = (Pblupgen + ssGBLUPgen+1), ncol  = 6)
@@ -492,7 +493,14 @@ evaIn$ebv = round(evaIn$ebv, 2)
 #evaIn[is.na(evaIn$ID),]$ID = 0
 evaIn$ID=as.integer(evaIn$ID)
 evaIn=evaIn[order(as.integer(evaIn$generation),as.integer(evaIn$ID)),]
-write.table(evaIn, "evaIn.txt", 
+evaIn[evaIn$maxmatings != 0 & evaIn$sex==1,]$maxmatings=1
+evaIn2=evaIn[evaIn$maxmatings != 0 & evaIn$sex==1,]
+meanEBV=mean(evaIn[evaIn$sex==2& evaIn$maxmatings>0,]$ebv)
+evaIn2=rbind(evaIn2,c("00001","0","0",2,gen-1,args[3],meanEBV,"PseudoFemale"))
+write.table(evaIn2, "evaIn.txt", 
+            quote = FALSE, sep = "\t",
+            row.names = FALSE, col.names = FALSE)
+write.table(evaIn[,c(1,4,6)], "SelCands",
             quote = FALSE, sep = "\t",
             row.names = FALSE, col.names = FALSE)
 
@@ -596,7 +604,7 @@ write.table(evaIn, "evaIn.txt",
 
 # Write the haplotypes of genotyped animals if method is haplotype-based.
 # Here I have to take care of cohorts.
-if (substr(args[2],1,1) == "H") {
+if (substr(args[2],1,1) == "H") { 
 haplo=get.haplo(population, cohorts = cohorts[-c(2,4,6,8,10)],
                 non.genotyped.as.missing = TRUE)
 haplo[is.na(haplo)] <- 9
