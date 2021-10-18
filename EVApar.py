@@ -16,12 +16,15 @@ if method == "Ped":
     fileG = 'pedigree'
 else:
         fileG = 'file'
-outname= wd + "/EVA.prm"
+outname= wd + "/" + "/EVA.prm"
 if not os.path.exists("Gmatrix"):
     os.mkdir("Gmatrix")
+if not os.path.exists("_evaSim"):
+    os.mkdir("_evaSim")
+
 par = "&DataParameters \n\
-   DataFile                     = 'evaIn.txt' ,\n\
-   ResultsDirectory             = './evaSim/' ,\n\
+   DataFile                     = '" + wd + "/evaIn.txt' ,\n\
+   ResultsDirectory             = '" + wd + "/evaSim/" + "' ,\n\
    IgnoreParentalPedigreeErrors = .true. , \n\
    RecodeFile                   = 'RecodedIds.dat'\n\
 / \n\
@@ -30,11 +33,13 @@ par = "&DataParameters \n\
 / \n\
 &RelationshipMatrix \n\
   Source  = " + fileG + ",\n\
-  Gfile = 'Gmatrix.gmat',\n\
+  Gfile = '" + wd + "/Gmatrix.gmat',\n\
   TimeSteps = 0\n\
 / \n\
 &OCSParameters \n\
-  nmatings         = 100,\n\
+  nmatings         = 5000,\n\
+  optimise         = 'constraint',\n\
+  dFconstraint     = 0.005,\n\
   w_merit          = 0,\n\
   w_relationship   = 0,\n\
   LimitMaleMatings = 1,\n\
