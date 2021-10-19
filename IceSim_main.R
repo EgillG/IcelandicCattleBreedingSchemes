@@ -30,7 +30,7 @@ QTLMaf <- 0.5
 #Number of QTL
 qtl = 1000
 # Number of offspring each generation
-breedSize = 10000
+breedSize = 1000
 # Number of males and females selected each generation
 SelMales=as.integer(args[3])
 SelFemales=breedSize/2
@@ -102,6 +102,57 @@ funcMaf <- function(x){
   }
 
 }
+
+getHet<- function(x,y,z) {
+#  This function extracts the heterozygosity of markers and returns a data frame
+  df = data.frame(get.effect.freq(population=x, cohorts = y))
+  effects = data.frame(x$info$real.bv.add[[1]][,c(1,2,3,4,5)])
+  effects$X1=effects$X1 + (effects$X2-1)*numMarkers
+  effects$X1=as.character(effects$X1)
+  effects = effects[,-2]
+  # find the frequencies.
+  df$X1 = row.names(df)
+  # merge 
+  mrg = merge(effects, df, by = "X1")
+  mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
+  mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
+  colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
+  return(mrg)
+}
+
+getAll<- function(x, y, z, w, p, func1, func2) {
+  #  This function extracts the heterozygosity of markers and returns a data frame
+  out=rep(0,6)
+  bv <- get.bv(population, cohorts = w)
+  out[1] <- mean(bv)
+  # Get kinship from IBD. 
+  out[2] <- kinship.emp.fast(population = p,
+                             cohorts = w,
+                             ibd.obs = length(bv)/10,
+                             hbd.obs = length(bv)/10)[1]
+  
+  # print mean heterozygosity and store in info matrix.
+  print(c("mean heterozygosity of QTL, gen:", paste(y), paste(mean(sum(x$Hetero)/(sum(x$Homo0+x$Hetero+x$Homo1))))))
+  out[3] = mean(sum(x$Hetero)/(sum(x$Homo0+x$Hetero+x$Homo1)))
+  freq1=data.frame(x[,c(2,8)])
+  freq2=data.frame(x[,c(4,9)])
+  afi <- apply(x[,c(5,6,7)], MARGIN = 1, FUN = func1)
+  out[5] <- sum(afi)/qtl
+  # compute total heterozygosity of markers and number of fixed alleles
+  # Get genotypes: 
+  # Assign
+  fixSeg <- apply(get.geno(p, cohorts = w), MARGIN = 1, FUN = func2)
+  # Sum of fixSeg is the number of segregating alleles
+  # Put in percentage of alleles segregating.
+  out[4] <- sum(fixSeg)/length(fixSeg)
+  colnames(freq1) = c("effect","frequency")
+  colnames(freq2) = c("effect","frequency")
+  dat = rbind(freq1,freq2)
+return(out)
+}
+
+
+
 mapfile = paste("../../QMSim/data_",args[1],".map",sep="")
 pedfile = paste("../../QMSim/data_",args[1],".ped",sep="")
 freqfile = paste("../../QMSim/plink_",args[1],".frq",sep="")
@@ -207,60 +258,6 @@ cohorts[2] = "Cohort_1_F"
 # Set index for cohorts matrix
 cohIndex = 3
 
-# Set values for cohort one into info matrix
-# Get kinship from IBD. 
-info[1,2] <- kinship.emp.fast(population = population, gen = 1,ibd.obs = breedSize/10, hbd.obs = breedSize/10)[1]
-population <- breeding.diploid(population, 
-                               heritability = 0.4, 
-                               phenotyping = "non_obs_f",
-                               # phenotyping = "non_obs_f", # phenotype non-phenotyped females
-                               bve = TRUE, # estimate breeding values
-                               relationship.matrix="kinship", # use pedigree relationships
-                               bve.cohorts = cohorts, # Generations of individuals to consider in bve
-                               share.genotyped = 0,
-                               store.effect.freq = TRUE)
-bv <- get.bv(population, gen = 1)
-info[1,1] <- mean(bv)
-df=data.frame(get.effect.freq(population, gen = 1))
-# info$real.bv.add : Lists with an overview of all single marker QTLs for each trait
-head(population$info$real.bv.add[[1]][,c(1,3,4,5)])
-# take out the effects
-effects = data.frame(population$info$real.bv.add[[1]][,c(1,2,3,4,5)])
-head(effects)
-# change to character
-effects$X1=effects$X1 + (effects$X2-1)*numMarkers
-effects$X1=as.character(effects$X1)
-effects = effects[,-2]
-# find the frequencies.
-head(df)
-df$X1 = row.names(df)
-# merge 
-mrg = merge(effects, df, by = "X1")
-mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
-p[1,] <- mrg$freq0
-# pring mean heterozygosity and store in info matrix.
-print(c("mean heterozygosity of QTL, gen:", paste(1), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
-info[1, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
-freq1=data.frame(mrg[,c(2,8)])
-freq2=data.frame(mrg[,c(4,9)])
-afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
-sum(afi)
-info[1, 5] <- sum(afi)/qtl
-# compute total heterozygosity of markers and number of fixed alleles
-# Get genotypes: 
-bl=get.geno(population, gen = 1)
-# Assign
-fixSeg <- apply(bl, MARGIN = 1, FUN = func)
-# Sum of fixSeg is the number of segregating alleles
-sum(fixSeg)
-# Put in percentage of alleles segregating.
-info[1,4] <- sum(fixSeg)/length(fixSeg)
-colnames(freq1) = c("effect","frequency")
-colnames(freq2) = c("effect","frequency")
-dat = rbind(freq1,freq2)
-#plot(dat$frequency,dat$effect)
 gen=2
 
 # Add a genotyping array
@@ -318,56 +315,11 @@ for(gen in 1:Pblupgen+1){
 #                                 max.offspring = c(breedSize/SelMales,2),
                                  store.effect.freq = TRUE)
 
-        # To compute the heterozygosity
-        df=data.frame(get.effect.freq(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2])))
-        # info$real.bv.add : Lists with an overview of all single marker QTLs for each trait
-        head(population$info$real.bv.add[[1]][,c(1,3,4,5)])
-        # take out the effects
-        effects = data.frame(population$info$real.bv.add[[1]][,c(1,2,3,4,5)])
-        head(effects)
-        # change to character
-        effects$X1=effects$X1 + (effects$X2-1)*numMarkers
-        effects$X1=as.character(effects$X1)
-        effects = effects[,-2]
-        # find the frequencies.
-        head(df)
-        df$X1 = row.names(df)
-        # merge 
-        mrg = merge(effects, df, by = "X1")
-        mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
-        p[gen,] <- mrg$freq0
-        info[gen,6] <- var(p[gen,]-p[gen-1,])
-        # print mean heterozygosity and store in info matrix.
-        print(c("mean heterozygosity of QTL, gen:", paste(gen), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
-        info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
-        freq1=data.frame(mrg[,c(2,8)])
-        freq2=data.frame(mrg[,c(4,9)])
-        afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
-        sum(afi)
-        info[gen, 5] <- sum(afi)/qtl
-        # compute total heterozygosity of markers and number of fixed alleles
-        # Get genotypes: 
-        bl=get.geno(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        # Assign
-        fixSeg <- apply(bl, MARGIN = 1, FUN = func)
-        # Sum of fixSeg is the number of segregating alleles
-        sum(fixSeg)
-        # Put in percentage of alleles segregating.
-        info[gen,4] <- sum(fixSeg)/length(fixSeg)
-        colnames(freq1) = c("effect","frequency")
-        colnames(freq2) = c("effect","frequency")
-        dat = rbind(freq1,freq2)
-        #plot(dat$frequency,dat$effect)
-        # hist(dat$frequency, breaks = 100)
-        # Get kinship from IBD. 
-        info[gen,2] <- kinship.emp.fast(population = population,
-                                              cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]),
-                                              ibd.obs = breedSize/10,
-                                              hbd.obs = breedSize/10)[1]
-        bv <- get.bv(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        info[gen,1] <- mean(bv)
+   mrg <- getHet(population,c(cohorts[cohIndex-1], cohorts[cohIndex-2]),numMarkers)
+   p[gen,] <- mrg$freq0
+   info[gen,] <- getAll(mrg, gen, qtl, c(cohorts[cohIndex-1], cohorts[cohIndex-2]), population, funcSegQTL, func)
+   
+
   # Replace previous male generation with selected bulls by updating the cohort vector
   cohorts[cohIndex-2] =  paste("SelectedBulls",gen-1, sep="")
   # Assign the males to cohIndex.
@@ -666,55 +618,9 @@ png(paste(args[2],"_",args[2],"_",args[1],gen,".png",sep=""))
 hist(a[,6], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of use for each sire")
 dev.off()
 	print(paste("write genomic information for generation",gen, sep = " "))
-        df=data.frame(get.effect.freq(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2])))
-        # info$real.bv.add : Lists with an overview of all single marker QTLs for each trait
-        head(population$info$real.bv.add[[1]][,c(1,3,4,5)])
-        # take out the effects
-        effects = data.frame(population$info$real.bv.add[[1]][,c(1,2,3,4,5)])
-        head(effects)
-        # change to character
-        effects$X1=effects$X1 + (effects$X2-1)*numMarkers
-        effects$X1=as.character(effects$X1)
-        effects = effects[,-2]
-        # find the frequencies.
-        head(df)
-        df$X1 = row.names(df)
-        # merge 
-        mrg = merge(effects, df, by = "X1")
-        mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
-        p[gen,] <- mrg$freq0
-        info[gen,6] <- var(p[gen,]-p[gen-1,])
-        # print mean heterozygosity and store in info matrix.
-        print(c("mean heterozygosity of QTL, gen:", paste(gen), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
-        info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
-        freq1=data.frame(mrg[,c(2,8)])
-        freq2=data.frame(mrg[,c(4,9)])
-        afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
-        sum(afi)
-        info[gen, 5] <- sum(afi)/qtl
-        # compute total heterozygosity of markers and number of fixed alleles
-        # Get genotypes: 
-        bl=get.geno(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        # Assign
-        fixSeg <- apply(bl, MARGIN = 1, FUN = func)
-        # Sum of fixSeg is the number of segregating alleles
-        sum(fixSeg)
-        # Put in percentage of alleles segregating.
-        info[gen,4] <- sum(fixSeg)/length(fixSeg)
-        colnames(freq1) = c("effect","frequency")
-        colnames(freq2) = c("effect","frequency")
-        dat = rbind(freq1,freq2)
-        #plot(dat$frequency,dat$effect)
-        # hist(dat$frequency, breaks = 100)
-        # Get kinship from IBD. 
-        info[gen,2] <- kinship.emp.fast(population = population,
-                                              cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]),
-                                              ibd.obs = breedSize/10,
-                                              hbd.obs = breedSize/10)[1]
-        bv <- get.bv(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        info[gen,1] <- mean(bv)
+   mrg <- getHet(population,c(cohorts[cohIndex-1], cohorts[cohIndex-2]),numMarkers)
+   p[gen,] <- mrg$freq0
+   info[gen,] <- getAll(mrg, gen, qtl, c(cohorts[cohIndex-1], cohorts[cohIndex-2]), population, funcSegQTL, func)
 
 
 # Update cohortlist
