@@ -272,6 +272,7 @@ population <- add.array(population,
           marker.included = markerIncluded,
           array.name = "YarraY")
 
+population <- bv.standardization(population, gen = 1)
 
 for(gen in 1:Pblupgen+1){
     print(paste("PBLUP Generation: ", gen))
