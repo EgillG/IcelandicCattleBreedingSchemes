@@ -2,11 +2,21 @@
 """
 Created on Thu Oct 14 10:58:24 2021
 
-Here I start by making a dictionary for selection candidates.
-Then the program read female - male relationships only, and adds these values
-to the dictionary. After all values have been stored, the numbers
-are divided with the number of female selection candidates.
+This program reads a file called SelCands, which contains the ID, sexc
+and number of progeny of animals.
+If number of progeny is higher than 0,
+then the ID and sex is stored in a dictionary.
 
+Then the program reada relationships from the file
+ReductedMatrix. Male-male relationshpis are written to a file
+EVArels.txt, but female to male relationships are added and stored.
+These sums are divided with number of female selection candidates to
+obtain the average relationship of females to males.
+
+Lastly, all pairwise female-female relationships are summed and divided
+with number of relationships to obtain the average relationship among
+females.
+The pseudo-female is then constructed and added to EVArels.txt
 @author: au589863
 """
 
@@ -57,24 +67,16 @@ len(List)
 # group_df=dataF[["B","C"]].groupby("B").mean()
 # List[:5]
 
-Inbreeding = 0
-InbreedCount = 0
 meanRel = 0
 count=0
 with open(file, 'r') as fp:
     for cnt, line in enumerate(fp):
         i=line.rstrip("\n").split( )
         if dictionary[i[0]] == 2 and dictionary[i[1]] == 2:
-            if i[0] != i[1]:
                 meanRel=meanRel + float(i[2])
                 count +=1 
-#                df.append(i)
-            if i[0] == i[1]:
-                Inbreeding=Inbreeding+float(i[2])
-                InbreedCount += 1
-assert InbreedCount == numFemales
-assert count == (numFemales*(numFemales-1))/2
-Inbreeding/InbreedCount
+
+assert count == (numFemales*(numFemales-1))/2 + numFemales
 meanRel/count
 # Testing code
 # sum([float(i[2]) for i in df])/count
