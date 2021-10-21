@@ -83,7 +83,10 @@ python3 EVApar.py $method $NumBulls $wd
 cd $method
 #cut -f1,4,6 evaIn.txt > SelCands
 # Use grep to remove animals that are not candidates for selection.
-grep -vwf <(awk '$3==0{print $1}' SelCands) Gmatrix.gmat > ReducedMatrix
+if [ $method =!= "Ped" ]
+then
+grep -wf  <(cut -f1 SelCands) Gmatrix.gmat > ReducedMatrix
+fi
 echo $wd
 python3 G_matrixPreparation_3.py
 mkdir evaSim

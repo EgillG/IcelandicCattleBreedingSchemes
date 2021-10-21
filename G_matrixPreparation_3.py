@@ -25,11 +25,10 @@ dictionary = {}
 with open(DicFile, 'r') as fp:
     for cnt, line in enumerate(fp):
         i=line.rstrip("\n").split( )
-        if int(i[2]) > 0:
-            dictionary[i[0]] = int(i[1])
+        dictionary[i[0]] = int(i[1])
 
 MaleList = {i:0 for i in dictionary if dictionary[i]==1}
-numFemales = len(dictionary) - len(MaleList)
+numFemales = len({i:0 for i in dictionary if dictionary[i]==2})
 numMales = len(MaleList)
 file = "ReducedMatrix"
 df=[]
@@ -41,6 +40,8 @@ NewFile = open("EVArels.txt","w")
 with open(file, 'r') as fp:
     for cnt, line in enumerate(fp):
         i=line.rstrip("\n").split( )
+        if i[0] not in dictionary or i[1] not in dictionary:
+            continue
         if dictionary[i[0]] == 1 and dictionary[i[1]] == 1:
                  NewFile.write(i[0]+"\t"+i[1]+"\t"+i[2]+"\n")
                  count += 1
@@ -72,7 +73,9 @@ count=0
 with open(file, 'r') as fp:
     for cnt, line in enumerate(fp):
         i=line.rstrip("\n").split( )
-        if dictionary[i[0]] == 2 and dictionary[i[1]] == 2:
+        if i[0] not in dictionary or i[1] not in dictionary:
+            continue
+        elif dictionary[i[0]] == 2 and dictionary[i[1]] == 2:
                 meanRel=meanRel + float(i[2])
                 count +=1 
 

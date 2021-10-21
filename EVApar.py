@@ -10,12 +10,7 @@ assert len(sys.argv[1:]) == 3
 method = str(sys.argv[1])
 numBulls = str(sys.argv[2])
 wd = str(sys.argv[3])
-#method = "Ped"
-#numBulls = 20
-if method == "Ped":
-    fileG = 'pedigree'
-else:
-        fileG = 'file'
+fileG = 'file'
 outname= wd + "/" + "/EVA.prm"
 if not os.path.exists("Gmatrix"):
     os.mkdir("Gmatrix")

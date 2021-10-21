@@ -205,7 +205,7 @@ for(gen in 1:(Pblupgen+1)){
                                    bve.cohorts = cohorts, # Generations of individuals to consider in bve
                                    share.genotyped = 0)
 
-   print(paste("phenotypes for cohort", cohorts[cohIndex-3],"were generated for generation ",gen))
+   print(paste("phenotypes for cohort", cohorts[cohIndex-1],"were generated for generation ",gen))
    # Generate a copy of the selected bulls.
    population <- breeding.diploid(population, 
                                   selection.size = c(SelMales,SelFemales),
@@ -287,8 +287,8 @@ population <- breeding.diploid(population,
                                selection.criteria = "bve",
                                selection.m.cohorts = cohorts[cohIndex-2],
 #                               add.gen = Pblupgen+gen-2, #check if this is correct.
-                               name.cohort = paste("GenoBulls",gen-1, sep=""))
-cohorts[cohIndex-2] <- paste("GenoBulls",gen-1, sep="")
+                               name.cohort = paste("GenoBulls",gen, sep=""))
+cohorts[cohIndex-2] <- paste("GenoBulls",gen, sep="")
 print(paste("her er eg a undan ebv, kynslod: ",gen))
 # Female parents of selection candidates are phenotyped, but not males.
 # All females in the current generation are genotyped at this stage
@@ -298,7 +298,7 @@ population <- breeding.diploid(population,
                                heritability = 0.4,
                                bve = TRUE,
                                relationship.matrix="vanRaden",
-                               remove.effect.position = TRUE,
+                               remove.effect.position = FALSE,
                                singlestep.active = TRUE,
                                bve.cohorts = cohorts,
                                genotyped.array = 2)
@@ -309,84 +309,64 @@ print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
 ###############################################################################
 # Try OCS
 ###############################################################################
-# Is the pedigree containing all the relevant animals? 
-# Maybe produce whole pedigree rather than specify cohorts.
-# Start here to construct the pedigree for input to EVA.
-# First take out the whole pedigree, to make lists of IDs to convert.
-ped <- data.frame(get.pedigree(population, gen = 1:length(population$breeding)))
-
-matc=data.frame(ped$offspring, row.names(ped))
-colnames(matc) = c("ID","RecodeID")
-ped <- get.pedigree(population, cohorts = cohorts)
-ped <- data.frame(ped)
-# Assign sex
-# First assign all animals as 1 (males)
-ped$sex = "1"
-# Assign 2 to animals with F as their last letter
-ped[substr(ped$offspring,1,1) == "F",]$sex = "2"
-# Use regular expressions to add a column with generation number
-# Start by generations 1-9, look for rows with _ followed by any character.
-# Print the character after _.
-ped$Generation <- substr(str_extract(ped$offspring,"_.$"),2,2)
-# Next find row with _ followed by two characters. Print two characters after _
-ped[is.na(ped$Generation),]$Generation <- substr(str_extract(ped[is.na(ped$Generation),]$offspring,"_..$"),2,3)
-# Make column with maximum matings for input to EVA
-ped$maxmatings = 0
-# Modify generation values using mapvalues from the plyr package
-# Males with _3 are generation 2.
-# Females with _4 are 3 and males with _5 are also 3 etc.
-ped$Generation = mapvalues(ped$Generation, MoBPSGen, ve)
-# change to integer
-ped$Generation = as.integer(ped$Generation)
-# Set maxmatings to value MaxMate for selection candidates. Set to 1 for all females in
-# generation gen, and to 0 for bulls with ebv lower than mean ebv
-# Make a column maxmatings. Start by assigning all animals in the current 
-# generation to MaxMate
-ped[ped$Generation == gen-1,]$maxmatings = MaxMate
-# Assign females in current generation to 1 mating
-ped[ped$Generation == gen-1 & ped$sex == "2",]$maxmatings = 1
-# make matrix of ebvs.
-bve <- get.bve(population, cohorts = cohorts)
-# The input to EVA, evaIn contains ped and ebvs.
-# Use merge to combine ped and bve.
-evaIn <- merge(ped, data.frame(t(bve)), by.x = "offspring", by.y = "row.names", sort = F, all.x = TRUE)
-evaIn$maxmatings=as.character(evaIn$maxmatings)
-# Apply truncation selection here on the GEBVs, only 20% best bulls are selecte
-# This simply takes the last breedsize/4 number of bulls in the evaIn file (which should be the genotyped bulls)
-evaIn[(dim(evaIn)[1]-breedSize/4):(dim(evaIn)[1]),]$maxmatings = MaxMate
-
-#Big <- merge(ped, data.frame(t(pheno)), by.x = "offspring", by.y = "row.names", sort = F)
-tail(evaIn)
-#evaIn=evaIn[order(evaIn$Generation),]
-evaIn$ID = mapvalues(evaIn$offspring,matc$ID,matc$RecodeID, warn_missing = FALSE)
-evaIn=evaIn[,c(8,2,3,4,5,6,7,1)]
-
-#make dataframe of individual MoBPS IDs and IDs for EVA.
-evaIn$mother <- mapvalues(evaIn$mother,matc$ID,as.integer(matc$RecodeID), warn_missing = FALSE)
-evaIn$father <- mapvalues(evaIn$father,matc$ID,matc$RecodeID, warn_missing = FALSE)
-
-colnames(evaIn)=c("ID", "sire", "dam", "sex" ,"generation", "maxmatings", 
+  ped <- data.frame(get.pedigree(population, gen = 1:length(population$breeding)))
+  ped2 = data.frame(get.pedigree(population, gen = 1:length(population$breeding), id = T))
+  matc=data.frame(ped$offspring, ped2$offspring)
+  colnames(matc) = c("ID","RecodeID")
+  ped <- data.frame(get.pedigree(population, cohorts = cohorts[c(cohIndex-1,cohIndex-2)]))
+    #ped <- data.frame(get.pedigree(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2])))
+  # Assign sex
+  # First assign all animals as 1 (males)
+  ped$sex = "1"
+  # Assign 2 to animals with F as their first letter
+  ped[substr(ped$offspring,1,1) == "F",]$sex = "2"
+  bve <- get.bve(population, cohorts = cohorts[c(cohIndex-1,cohIndex-2)])
+  # The input to EVA, evaIn contains ped and ebvs.
+  # Use merge to combine ped and bve.
+  evaIn <- merge(ped, data.frame(t(bve)), by.x = "offspring", by.y = "row.names", sort = F, all.x = TRUE)
+  evaIn$ID = mapvalues(evaIn$offspring,matc$ID,matc$RecodeID, warn_missing = FALSE)
+  
+  #make dataframe of individual MoBPS IDs and IDs for EVA.
+  evaIn$mother <- 0
+  evaIn$father <- 0
+  evaIn$generation = 1
+  evaIn$maxmatings = 1
+  evaIn[evaIn$sex==2,]$maxmatings = args[3]
+  evaIn = evaIn[c(6,2,3,4,7,8,5,1)]
+  colnames(evaIn)=c("ID", "sire", "dam", "sex" ,"generation", "maxmatings",
                     "ebv","MoBPSID")
-evaIn$ebv = round(evaIn$ebv, 2)
-#evaIn[is.na(evaIn$ID),]$ID = 0
-evaIn$ID=as.integer(evaIn$ID)
-evaIn=evaIn[order(as.integer(evaIn$generation),as.integer(evaIn$ID)),]
-evaIn[evaIn$maxmatings != 0 & evaIn$sex==1,]$maxmatings=1
-evaIn2=evaIn[evaIn$maxmatings != 0 & evaIn$sex==1,]
-meanEBV=mean(evaIn[evaIn$sex==2& evaIn$maxmatings>0,]$ebv)
-evaIn2=rbind(evaIn2,c("00001","0","0",2,gen-1,args[3],meanEBV,"PseudoFemale"))
-write.table(evaIn2, "evaIn.txt", 
-            quote = FALSE, sep = "\t",
-            row.names = FALSE, col.names = FALSE)
-write.table(evaIn[,c(1,4,6)], "SelCands",
-            quote = FALSE, sep = "\t",
-            row.names = FALSE, col.names = FALSE)
-
+  evaIn$ebv = round(evaIn$ebv, 2)
+  meanEBV=mean(evaIn[evaIn$sex== 2 & evaIn$maxmatings>0,]$ebv)
+  # Write selection candidates before adding pseudofemale
+  write.table(evaIn[,c(1,4)], "SelCands",
+              quote = FALSE, sep = "\t",
+              row.names = FALSE, col.names = FALSE)
+  evaIn=rbind(evaIn[evaIn$sex==1,],c("00001","0","0",2,1,args[3],round(meanEBV,2),"PseudoFemale"))
+  write.table(evaIn, "evaIn.txt",
+              quote = FALSE, sep = "\t",
+              row.names = FALSE, col.names = FALSE)
+  
+  if (args[2]=="Ped") {
+  bla = kinship.exp.store(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]), depth.pedigree = 7)
+  newFile=matrix(0,ncol=3, nrow=dim(bla)[1]*(dim(bla)[1]-1)/2+dim(bla)[1])
+  count=1
+  for (i in 1:dim(bla)[1]) {
+    for (j in i:dim(bla)[1]) {
+      #print(paste(i,j))
+      newFile[count,1] = rownames(bla)[i]
+      newFile[count,2] = colnames(bla)[j]
+      newFile[count,3] = bla[i,j]
+      count = count + 1
+    }
+  }
+  
+  write.table(newFile,"ReducedMatrix", quote = F, row.names = F, col.names = F)
+  }
 # Write genotypes if marker-based GMATRIX is used
   if (substr(args[2],1,1) == "M") { 
     # Here I retrieve the genotypes of desired cohorts
     genos = t(get.geno(population, 
-                       cohorts = cohorts[-c(2,4,6,8,10)],
+                       cohorts = cohorts[-seq(2, to = Pblupgen*2+2, by = 2)],
                        non.genotyped.as.missing = TRUE))
     genos = data.frame(genos)
     genos$ID <- row.names(genos)
@@ -538,12 +518,9 @@ population <- breeding.diploid(population,
                                max.offspring = c(breedSize/SelMales,2))
 # Here I can decide whether to make new cohort of selected bulls,
 # to replace the cohort of genotyped bulls.
-a <- get.pedigree(population, cohorts = get.cohorts(population)[c(length(get.cohorts(population))-1,length(get.cohorts(population))-2)], raw=TRUE)
-png(paste(args[2],"_",args[2],"_",args[1],gen,".png",sep=""))
-
-hist(a[,6], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of use for each sire")
-dev.off()
-	print(paste("write genomic information for generation",gen, sep = " "))
+a <- get.pedigree(population, gen = length(population$breeding), raw=TRUE)
+table(a[,6])	
+   print(paste("write genomic information for generation",gen, sep = " "))
    mrg <- getHet(population,c(cohorts[cohIndex-1], cohorts[cohIndex-2]),numMarkers)
    p_qtl[gen,] <- mrg$freq0
    info[gen,1:6] <- getAll(mrg, gen, c(cohorts[cohIndex-1], cohorts[cohIndex-2]), population, funcSegQTL, func)
@@ -558,38 +535,12 @@ cohorts[cohIndex] =  paste("ssGBLUP",gen,"_M", sep="")
 cohorts[cohIndex+1] =  paste("ssGBLUP",gen,"_F", sep="")
 cohIndex =+ cohIndex+2
 print(paste("end of generation",gen, sep = " "))      
+RDataFile <- paste(args[2],"_",args[1],gen,".RData",sep="")
+save.image(file=RDataFile)
 }
 summary(population)
 RDataFile <- paste(args[2],"_",args[1],".RData",sep="")
 save.image(file=RDataFile)
-
-png(paste(args[2],"_",args[1],"_BVdev.png",sep=""))
-#bv.development(population,cohort=get.cohorts(population),display.cohort.name = TRUE)
-bv.development(population,gen=1:length(population$breeding),display.cohort.name = TRUE)
-dev.off()
-png(paste(args[2],"_",args[1],"_kinshipdev.png",sep=""))
-kinship.development(population, gen=1:length(population$breeding),display.cohort.name = TRUE, ibd.obs = 10000)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_BV.png",sep=""))
-plot(info$BV)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_Coancestry.png",sep=""))
-plot(info$Coancestry)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_Heteroz.png",sep=""))
-plot(info$Heteroz)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_SegAlleles.png",sep=""))
-plot(info$SegQTL)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_DriftVariance.png",sep=""))
-plot(info$DriftVar)
-dev.off()
 
 
 qt <- get.qtl.variance(population, gen = 1:length(population$breeding))
@@ -600,5 +551,5 @@ write.table(qt, paste(args[2],"_",args[1],"_qt.txt",sep=""), quote = F, sep = "\
 write.table(info, file = paste(args[2],"_",args[1],"_info.txt",sep=""))
 
 write.table(p_qtl, file = paste(args[2],"_",args[1],"_p_qtl.txt",sep=""))
-write.table(p_markers, file = paste(args[2],"_",args[1],"_p_markers.txt",sep=""))
+write.table(p_marker, file = paste(args[2],"_",args[1],"_p_markers.txt",sep=""))
 write.table(p_neutral, file = paste(args[2],"_",args[1],"_p_neutral.txt",sep=""))
