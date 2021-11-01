@@ -4,8 +4,8 @@
 #--------------------------------------------------------------------------#
 #SBATCH -p ghpc_v1                 # Name of the queue
 #SBATCH -N 1                       # Number of nodes(DO NOT CHANGE)
-#SBATCH -n 6                       # Number of CPU cores
-#SBATCH --mem=200000                 # Memory in MiB(10 GiB = 10 * 1024 MiB)
+#SBATCH -n 2                       # Number of CPU cores
+#SBATCH --mem=40000                 # Memory in MiB(10 GiB = 10 * 1024 MiB)
 #SBATCH -J ocs_sim_job            # Name of the job
 #SBATCH --output=slurm_%x_%A.out   # STDOUT
 #SBATCH --error=slurm_%x_%A.err    # STDERR
