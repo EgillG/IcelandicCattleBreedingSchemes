@@ -27,10 +27,11 @@ if [ $method == "M1" ] || [ $method == "M2" ] || [ $method == "M1D" ] || [ $meth
 then
 echo method $method starting GMATRIX
 python3 gmatPar.py $wd $method
-awk '{ if (substr($2,2,1)!= "e") print $0}' M2D/Gmatrix/mapbase.dat > temp
-mv temp mapbase.dat
+#awk '{ if (substr($2,2,1)!= "e") print $0}' mapbase.dat > temp
+#mv temp mapbase.dat
 
 mv gmat.dat gmat.id gmat.map mapbase.dat $SLURM_SUBMIT_DIR/${method}/Gmatrix/
+
 echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
 
 JOBNAME=IceSim
@@ -54,8 +55,7 @@ echo "Gmatrix Job completed at $(date '+%y-%m-%d %H:%M:%S')"
 elif [ $method == "H1" ] || [ $method == "H2" ] || [ method == "H3" ]
 then
 # here method is an input to the haplotypes program, to tell it how long haplotypes to use
-python3 haplo.py $method
-
+Rscript haplo.R
 echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
 
 JOBNAME=IceSim

@@ -47,7 +47,8 @@ MaxMate=breedSize/SelMales
 # Pblupgen needs to be 5. Do not change.
 Pblupgen = 5
 #ssGBLUP
-ssGBLUPgen = 10
+ssGBLUPgen = 4
+
 
 # Matrix for storing results of genetic gain, heterozygosity and inbreeding.
 info = matrix(nrow = (Pblupgen + ssGBLUPgen+1), ncol  = 8)
@@ -270,10 +271,15 @@ ve = rep(1:(length(MoBPSGen)%/%2), times = sbla)
 gen=7
 print("Info matrix looks like this before ssGBLUP stage:\n")
 print(info)
+print("starting genomic selection")
+RDataFile <- paste(args[2],"_",args[1],gen,"BeforeGenomicSelection.RData",sep="")
+save.image(file=RDataFile)
+
 # 
 ###############################################################################
 # Start of genomic selection
 for (gen in (Pblupgen+2):(ssGBLUPgen+Pblupgen+1)){
+print(paste("list of cohorts when genomic selection starts in generation ",gen, ":", toString(cohorts), sep=""))
 # Here select 2000 bulls based on parent average to be genotyped.
 # Check whether the parent mean is computed correctly (for the selection candidates)
 population <- breeding.diploid(population,
@@ -290,22 +296,115 @@ population <- breeding.diploid(population,
                                name.cohort = paste("GenoBulls",gen, sep=""))
 cohorts[cohIndex-2] <- paste("GenoBulls",gen, sep="")
 print(paste("her er eg a undan ebv, kynslod: ",gen))
+
 # Female parents of selection candidates are phenotyped, but not males.
 # All females in the current generation are genotyped at this stage
 population <- breeding.diploid(population,
                                phenotyping.cohorts = cohorts[cohIndex-3], #phenotype previous generation
                                genotyped.cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]), #genotype all females, and 2000 bulls
-                               heritability = 0.4,
-                               bve = TRUE,
-                               relationship.matrix="vanRaden",
-                               remove.effect.position = FALSE,
-                               singlestep.active = TRUE,
-                               bve.cohorts = cohorts,
-                               genotyped.array = 2)
-#                                 bve.gen=1:(index*2+1))# Has to be 10 or 11 because the copied individuals
-#                                 above (for genotyping of bulls) get their own generation.
+                               bve = FALSE)
 print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
 
+# Now use DMU for single step breeding value estimation.
+## First write necessary files.
+ped <- data.frame(get.pedigree(population, gen = 1:length(population$breeding)))
+ped2 = data.frame(get.pedigree(population, gen = 1:length(population$breeding), id = T))
+matc=data.frame(ped$offspring, ped2$offspring)
+colnames(matc) = c("ID","RecodeID")
+
+pedig <- data.frame(get.pedigree(population, gen=1:length(population$breeding)))
+# Put in generation number (not exactly correct but good enough):
+pedig$Generation <- substr(str_extract(pedig$offspring,"_.$"),2,2)
+pedig[is.na(pedig$Generation),]$Generation <- substr(str_extract(pedig[is.na(pedig$Generation),]$offspring,"_..$"),2,3)
+pedig$Generation <- mapvalues(pedig$Generation, MoBPSGen, ve, F)
+
+pedig$offspring <- mapvalues(pedig$offspring, matc$ID, matc$RecodeID, warn_missing = F)
+pedig$father <- mapvalues(pedig$father, matc$ID, matc$RecodeID, warn_missing = F)
+pedig$mother <- mapvalues(pedig$mother, matc$ID, matc$RecodeID, warn_missing = F)
+pedig <- unique(pedig)
+pedig <- pedig[pedig$father!=pedig$offspring,]
+write.table(pedig, 
+            "pedigree.txt",
+            row.names = FALSE, 
+            col.names = FALSE,
+            quote = FALSE, 
+            sep = " ")
+
+pheno = data.frame(t(get.pheno(population, cohorts = cohorts)))
+pheno$ID <- rownames(pheno)
+pheno$ID <- mapvalues(pheno$ID, matc$ID, matc$RecodeID, F)
+pheno$mean = 1
+pheno[is.na(pheno)] <- -99
+pheno$Trait.1 <- round(pheno$Trait.1,2)
+pheno = pheno[,c(2,3,1)]
+write.table(pheno, "phenotypes.txt",
+            row.names = FALSE, 
+            col.names = FALSE,
+            quote = FALSE, 
+            sep = " ")
+genos = data.frame(t(get.geno(population, 
+                   cohorts = cohorts[-seq(2, to = Pblupgen*2+2, by = 2)],
+                   non.genotyped.as.missing = TRUE)))
+genos[is.na(genos)] <- 9
+genos$ID <- row.names(genos)
+genos$RecodeID <- mapvalues(genos$ID, matc$ID, matc$RecodeID, F)
+genos <- genos %>% relocate(RecodeID,ID, .before = X1)
+write.table(genos,
+            "Gmatrix/gmat.dat", 
+            row.names = FALSE, 
+            col.names = FALSE,
+            quote = FALSE, 
+            sep = " ")
+    # make mapfile for GMATRIX
+    # mapfile is simply the number of snps and a 0 or 1, depending on whether
+    # the marker is genotyped or not
+      mapfile = cbind(seq(1,population$info$snp[1]*population$info$chromosome),
+                      rep(0,population$info$snp[1]*population$info$chromosome))
+      # This loop checks whether the marker is genotyped
+      # (I know that there is a more efficient way)
+      for (i in 1:dim(mapfile)[1]) {
+        if (markerIncluded[i]) {
+          mapfile[i,2] <- 1
+        }
+      }
+    write.table(cbind(mapfile,rep(1,dim(mapfile)[1])), 
+                "Gmatrix/gmat.map",
+                row.names = FALSE, 
+                col.names = FALSE,
+                quote = F,
+                sep = " ")
+    # Make id file for GMATRIX
+    idfile <- cbind(genos$RecodeID,genos$RecodeID,rep(1,length(genos$RecodeID)))
+    # Should this code not be run? I don't remember what it does
+    # genotyped = get.genotyped(population, gen=1:length(population$breeding))
+    # for (i in 1:dim(idfile)[1]) {
+    #   if (genotyped[i]) {
+    #     idfile[i,3] <- 1
+    #   }
+    # }
+    write.table(idfile, 
+                "Gmatrix/gmat.id",
+                row.names = FALSE, 
+                col.names = FALSE,
+                quote = F,
+                sep = " ")
+# write the necessary variances (I use the true values)
+varA = sum(get.qtl.variance(population = population, cohorts=cohorts)[[1]][,3])
+varE = ((1-h2)/h2)*varA
+write.table(rbind(c(1,1,1, varA),c(2,1,1,varE)),
+                "variances.txt",
+                row.names = FALSE,
+                col.names = FALSE,
+                quote = F,
+                sep = " ")
+
+system(paste("python3 gmatPar.py ", getwd(), " M1", sep = ""))
+system(paste("bash DMU.sh ", args[2], sep=""))
+
+#DMU ebvs are inserted back into MoBPS and extracted again for ocs computations (silly indeed).
+dmuBVE = data.frame(read.table("dmuSS.SOL", skip = 2, stringsAsFactors = F)[,c(5,8)])
+dmuBVE$V5 <- mapvalues(dmuBVE$V5, matc$RecodeID, matc$ID, F)
+population <- insert.bve(population, dmuBVE)
 ###############################################################################
 # Try OCS
 ###############################################################################
@@ -347,7 +446,7 @@ print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
               row.names = FALSE, col.names = FALSE)
   
   if (args[2]=="Ped") {
-  bla = kinship.exp.store(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]), depth.pedigree = 7)
+  bla = kinship.exp.store(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]), depth.pedigree = Pblupgen+ssGBLUPgen)
   newFile=matrix(0,ncol=3, nrow=dim(bla)[1]*(dim(bla)[1]-1)/2+dim(bla)[1])
   count=1
   for (i in 1:dim(bla)[1]) {
@@ -365,6 +464,8 @@ print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
 # Write genotypes if marker-based GMATRIX is used
   if (substr(args[2],1,1) == "M") { 
     # Here I retrieve the genotypes of desired cohorts
+print(paste("these cohorts genotypes were written in generation ",gen, " ", toString(cohorts[-seq(2, to = Pblupgen*2+2, by = 2)]), sep=""))
+
     genos = t(get.geno(population, 
                        cohorts = cohorts[-seq(2, to = Pblupgen*2+2, by = 2)],
                        non.genotyped.as.missing = TRUE))
@@ -404,13 +505,7 @@ print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
                 sep = " ")
     # Make id file for GMATRIX
     idfile <- cbind(genos$RecodeID,genos$RecodeID,rep(1,length(genos$RecodeID)))
-    # Should this code not be run? I don't remember what it does
-    # genotyped = get.genotyped(population, gen=1:length(population$breeding))
-    # for (i in 1:dim(idfile)[1]) {
-    #   if (genotyped[i]) {
-    #     idfile[i,3] <- 1
-    #   }
-    # }
+
     write.table(idfile, 
                 "gmat.id",
                 row.names = FALSE, 
@@ -422,7 +517,7 @@ print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
       freqfile <-  get.geno(population, gen = 1, non.genotyped.as.missing = FALSE)
       # rowMeans can be used to compute allele frequencies (for the larger allele)
       freq <- rowMeans(freqfile)/2
-      write.table(freq[freq!=0], 
+      write.table(freq, 
                   "mapbase.dat",
                   row.names = TRUE, 
                   col.names = FALSE,
@@ -437,7 +532,7 @@ print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
                             non.genotyped.as.missing = FALSE)
       # rowMeans can be used to compute allele frequencies (for the larger allele)
       freq <- rowMeans(freqfile)/2
-      write.table(freq[freq!=0], 
+      write.table(freq, 
                   "mapbase.dat",
                   row.names = TRUE, 
                   col.names = FALSE,
@@ -451,7 +546,7 @@ print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
                             non.genotyped.as.missing = FALSE)
       # rowMeans can be used to compute allele frequencies (for the larger allele)
       freq <- rowMeans(freqfile)/2
-      write.table(freq[freq!=0], 
+      write.table(freq, 
                   "mapbase.dat",
                   row.names = TRUE, 
                   col.names = FALSE,
@@ -472,6 +567,7 @@ write.table(haplo,"haplo.hap", row.names = FALSE, col.names = FALSE,
 # Use stringr to replace _set1 and _set2 with ""
 id=colnames(haplo)
 id=str_replace(id,"_set[1-2]","")
+id <- mapvalues(id,matc$ID,matc$RecodeID, F)
 # Write sample IDs
 write.table(unique(id),"haplo.sample", row.names = FALSE, col.names = FALSE,
             quote = FALSE, sep = "\t")
