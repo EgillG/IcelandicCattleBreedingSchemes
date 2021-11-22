@@ -1,0 +1,37 @@
+#**********************************************************************
+# This is the file DMU1 read from standard input                      *
+#                                                                     *
+# Lines starting with # are lines with information's                  *
+# on how and what to fill in.                                         *
+#                                                                     *
+# Lines starting with $ are KEYWORD lines used to locate              *
+# information's in this file.                                         *
+#                                                                     *
+#**********************************************************************
+#
+#----------------------------------------------------------------------
+# COMMENT section
+
+$COMMENT
+single step GBLUP for simulation study (Project 4)
+
+$DATA  ASCII (2,1,-9) phenotypes.txt
+
+$ANALYSE 12 2 0 0
+
+$VARIABLE
+ID Mean
+Phen
+
+$MODEL
+1                                                                        
+0
+1 0 2 2 1
+1 1
+0
+0
+
+$VAR_STR 1 PED 1 ASCII pedigree.txt
+
+$PRIOR variances.txt
+

@@ -27,3 +27,5 @@ echo "Gmatrix Job completed at $(date '+%y-%m-%d %H:%M:%S')"
 cut -f 1 -d ' ' Gmatrix/gmat.dat > genotyped
 echo running single step GBLUP DMU
 bash r_dmu5 dmuSS
+awk '{print $5,$8}' dmuSS.SOL > temp
+mv temp dmuSS.SOL

@@ -4,8 +4,8 @@
 #--------------------------------------------------------------------------#
 #SBATCH -p ghpc_v1                 # Name of the queue
 #SBATCH -N 1                       # Number of nodes(DO NOT CHANGE)
-#SBATCH -n 2                       # Number of CPU cores
-#SBATCH --mem=10000                 # Memory in MiB(10 GiB = 10 * 1024 MiB)
+#SBATCH -n 4                       # Number of CPU cores
+#SBATCH --mem=100000                 # Memory in MiB(10 GiB = 10 * 1024 MiB)
 #SBATCH -J ocs_sim_job            # Name of the job
 #SBATCH --output=slurm_%x_%A.out   # STDOUT
 #SBATCH --error=slurm_%x_%A.err    # STDERR
@@ -18,7 +18,7 @@ NumBulls=${3?Error: Number of bulls not given}
 
 mkdir $method
 
-cp IceSim_main.R EVApar.py EVA.sh gmatPar.py haplo.py G_matrixPreparation_3.py r_dmu5 DMU.sh dmuSS.DIR $method
+cp IceSim_main.R EVApar.py EVA.sh gmatPar.py haplo.py G_matrixPreparation_3.py r_dmu5 DMU.sh dmuSS.DIR dmuPBLUP.DIR $method
 cd $method
 mkdir Gmatrix
 Rscript IceSim_main.R $replicate $method $NumBulls
