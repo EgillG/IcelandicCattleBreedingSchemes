@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Feb 18 10:45:50 2021
-Program to
+Program to 
 @author: au589863
 This program takes the input:
     number of replicates
