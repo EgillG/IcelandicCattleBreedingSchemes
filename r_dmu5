@@ -1,0 +1,46 @@
+#!/bin/bash
+export MKL_NUM_THREADS=1
+if [  $# -eq 0 ]
+  then
+    name=test5
+  else
+    name=$1
+fi
+
+export name
+ulimit -s unlimited
+time /opt/ghpc/dmu/dmuv6/R5.3-EM64T/bin/dmu1 < $name.DIR > $name.lst
+if [ $? -eq 0 ]
+then
+  echo '1' >> $name.lst
+  time /opt/ghpc/dmu/dmuv6/R5.3-EM64T/bin/dmu5 >> $name.lst
+  if [ $? -eq 0 ]
+  then
+    rm -f CODE_TABLE DMU_LOG fort.*
+    rm -f DUMMY MODINF DMU*.dir PARIN
+    rm -f RCDATA_I RCDATA_R
+    rm -f PEDFILE* AINV* fort.*
+    if [ -f INBREED ]
+    then
+      if [ -s INBREED ]
+      then
+        mv INBREED $name.INBREED
+      else
+        rm INBREED
+      fi
+    fi
+    mv SOL $name.SOL
+    rm -f *.log fort.*
+    cmp -s  $name.SOL $name.SOL.org
+    if [ $? -eq 0 ]
+    then
+      printf "Example %-27s OK \n" $name   >> ../run_ex.log
+    else
+      printf "Example %-27s Failed - Check output files \n" $name >> ../run_ex.log
+    fi
+  else
+    printf "Example %-27s Failed in DMU5 - Check output files \n" $name >> ../run_ex.log
+  fi
+else
+  printf "Example %-27s Failed in DMU1 - Check output files \n" $name >> ../run_ex.log
+fi

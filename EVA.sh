@@ -23,43 +23,19 @@ TMPDIR=/scratch/$USER/$SLURM_JOBID
 export TMPDIR
 mkdir -p $TMPDIR
 
-if [ $method == "M1" ] || [ $method == "M2" ] || [ $method == "M1D" ] || [ $method == "M2D" ] || [ $method == "M1D_Est" ] || [ $method == "M2D_Est" ] || [ $method == "M1R" ] || [ $method == "M2R" ]
+if [ $method == "M1" ] || [ $method == "M2" ] || [ $method == "M1D" ] || [ $method == "M2D" ] || [ $method == "M1D_Est" ] || [ $method == "M2D_Est" ] || [ $method == "M1R" ] || [ $method == "M2R" ] || [ $method == "M1_05" ] || [ $method == "M2_05" ]
 then
 echo method $method starting GMATRIX
-python3 gmatPar.py $wd $method
-awk '{ if (substr($2,2,1)!= "e") print $0}' M2D/Gmatrix/mapbase.dat > temp
-mv temp mapbase.dat
+python3 gmatPar.py $wd $method Yes
+#awk '{ if (substr($2,2,1)!= "e") print $0}' mapbase.dat > temp
+#mv temp mapbase.dat
 
-mv gmat.dat gmat.id gmat.map mapbase.dat $SLURM_SUBMIT_DIR/${method}/Gmatrix/
-echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
-
-JOBNAME=IceSim
-PARFILE=$SLURM_SUBMIT_DIR/${method}/Gmatrix/gmat.par
-PROG=/usr/home/qgg/gs/public/invg-md-all-v8/invgmatrix
-
-cp $PROG $TMPDIR/invgmatrix
-cp $PARFILE $TMPDIR/par.dat
-
-cd $TMPDIR/
-echo running GMATRIX
-ulimit -s unlimited
-echo $SLURM_SUBMIT_DIR
-./invgmatrix
-
-cd $SLURM_SUBMIT_DIR
-rm -rf /scratch/$USER/$SLURM_JOBID
-
-echo "Gmatrix Job completed at $(date '+%y-%m-%d %H:%M:%S')"
-
-elif [ $method == "H1" ] || [ $method == "H2" ] || [ method == "H3" ]
-then
-# here method is an input to the haplotypes program, to tell it how long haplotypes to use
-python3 haplo.py $method
+cp gmat.dat gmat.id gmat.map mapbase.dat $SLURM_SUBMIT_DIR/${method}_${replicate}/Gmatrix/
 
 echo " Gmatrix Job started at $(date '+%y-%m-%d %H:%M:%S')"
 
 JOBNAME=IceSim
-PARFILE=$SLURM_SUBMIT_DIR/Gmatrix/gmat.par
+PARFILE=$SLURM_SUBMIT_DIR/${method}_${replicate}/Gmatrix/gmat.par
 PROG=/usr/home/qgg/gs/public/invg-md-all-v8/invgmatrix
 
 cp $PROG $TMPDIR/invgmatrix
@@ -77,15 +53,36 @@ rm -rf /scratch/$USER/$SLURM_JOBID
 echo "Gmatrix Job completed at $(date '+%y-%m-%d %H:%M:%S')"
 
 fi
-mv ${method}/Gmatrix/gmat ${method}/Gmatrix.gmat
+
+if [ $method == "H1" ] || [ $method == "H2" ] || [ $method == "H3" ] || [ $method == "H4" ]
+then
+echo Haplotype based matrices
+tail -n +2 Gmatrix/gmat > temp
+mv temp Gmatrix/gmat
+fi
+cd $SLURM_SUBMIT_DIR
+
+mv ${method}_${replicate}/Gmatrix/gmat ${method}_${replicate}/Gmatrix.gmat
 # This program makes the EVA.prm file
 python3 EVApar.py $method $NumBulls $wd
-cd $method
+cd ${method}_${replicate}
 #cut -f1,4,6 evaIn.txt > SelCands
 # Use grep to remove animals that are not candidates for selection.
-grep -vwf <(awk '$3==0{print $1}' SelCands) Gmatrix.gmat > ReducedMatrix
+if [ $method != "Ped" ]
+then
+grep -wf  <(cut -f1 SelCands) Gmatrix.gmat > ReducedMatrix
+fi
 echo $wd
 python3 G_matrixPreparation_3.py
 mkdir evaSim
+
+echo "EVA Job started at $(date '+%y-%m-%d %H:%M:%S')"
+
 prg=/opt/ghpc/eva/bin/eva
 $prg EVA.prm
+echo lines in Gmatrix are:
+wc -l Gmatrix.gmat
+rm Gmatrix.gmat ReducedMatrix
+#rm haplomatrix*
+
+echo "EVA Job completed at $(date '+%y-%m-%d %H:%M:%S')"

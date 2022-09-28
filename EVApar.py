@@ -10,12 +10,7 @@ assert len(sys.argv[1:]) == 3
 method = str(sys.argv[1])
 numBulls = str(sys.argv[2])
 wd = str(sys.argv[3])
-#method = "Ped"
-#numBulls = 20
-if method == "Ped":
-    fileG = 'pedigree'
-else:
-        fileG = 'file'
+fileG = 'file'
 outname= wd + "/" + "/EVA.prm"
 if not os.path.exists("Gmatrix"):
     os.mkdir("Gmatrix")
@@ -33,18 +28,14 @@ par = "&DataParameters \n\
 / \n\
 &RelationshipMatrix \n\
   Source  = " + fileG + ",\n\
-  Gfile = '" + wd + "/Gmatrix.gmat',\n\
+  Gfile = '" + wd + "/EVArels.txt',\n\
   TimeSteps = 0\n\
 / \n\
 &OCSParameters \n\
-  nmatings         = 5000,\n\
+  nmatings         = " +numBulls + ",\n\
   optimise         = 'constraint',\n\
   dFconstraint     = 0.005,\n\
-  w_merit          = 0,\n\
-  w_relationship   = 0,\n\
   LimitMaleMatings = 1,\n\
-  W_nMales = -10000,\n\
-  NSelectedMales = " + numBulls + " \n\
 / \n\
 &AlgorithmParameters \n\
   generations                   = 10000 ,\n\

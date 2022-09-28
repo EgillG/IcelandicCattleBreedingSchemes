@@ -6,9 +6,10 @@ Created on Thu Oct  1 10:21:07 2020
 """
 import sys
 import os
-assert len(sys.argv[1:]) == 2
+assert len(sys.argv[1:]) == 3
 pwd = str(sys.argv[1]) + "/Gmatrix"
 method = str(sys.argv[2])
+singleS = str(sys.argv[3])
 print(pwd)
 outname= pwd + "/gmat.par"
 if not os.path.exists("Gmatrix"):
@@ -22,6 +23,13 @@ if len(method) > 2:
     freqmtd = 11
 else:
     freqmtd = 1
+if singleS == "Yes":
+   out_invG = str(0)
+   out_G = str(1)
+elif singleS == "No":
+   out_invG = str(1)
+   out_G = str(0)
+
 par = "$MAPFILE \n" + '\"' + pwd + "/gmat.map\" \n\
 $MARKERFILE \n" + '\"' + pwd + "/gmat.dat\" \n\
 $MAPBASEFILE \n" + '\"' + pwd + "/mapbase.dat\" \n\
@@ -40,7 +48,7 @@ $A1A1CODE\n\
 $MISSGENOTYPE\n\
 9\n\
 $MINMAF\n\
-0.01\n\
+0.00000001\n\
 $FREQMETHOD\n" + \
 str(freqmtd) + "\n\
 $SCALEMETHOD\n" + \
@@ -60,11 +68,11 @@ $ADJSCALEMISS\n\
 $CAL_DET\n\
 1\n\
 $OUTPRECISION\n\
-0\n\
-$OUT_GMATRIX\n\
-1\n\
-$OUT_IGMATRIX\n\
-0\n\
+4\n\
+$OUT_GMATRIX\n" + \
+out_G + "\n\
+$OUT_IGMATRIX\n" +\
+out_invG + "\n\
 $OUT_AMATRIX\n\
 0\n\
 $OUT_AMATRIX11\n\

@@ -1,0 +1,38 @@
+#!/bin/bash
+if [  $# -eq 0 ]
+  then
+    name=test4
+  else
+    name=$1
+fi
+export name
+time /opt/ghpc/dmu/dmuv6/R5.5TEST-EM64T/bin/dmu1 < $name.DIR > $name.lst
+if [ -s MODINF ]
+  then
+    echo '1' >> $name.lst
+   time /opt/ghpc/dmu/dmuv6/R5.5TEST-EM64T/bin/dmu4 >> $name.lst
+fi
+rm -f PEDFILE* AINV* fort.* PARIN DMU*.dir
+rm -f CODE_TABLE DMU_LOG 
+rm -f DUMMY MODINF 
+rm -f RCDATA_I RCDATA_R
+if [ -f INBREED ]
+  then
+    if [ -s INBREED ]
+      then
+        mv INBREED $name.INBREED
+     else
+       rm INBREED
+    fi
+fi
+if [ -s SOL ]
+  then
+  mv SOL $name.SOL
+   cmp -s  $name.SOL $name.SOL.org
+   if [ $? -eq 0 ]
+     then
+       echo "Example $name in $PWD OK" >> ../run_ex.log
+     else
+       echo "Example $name in $PWD failed - Check output files" >> ../run_ex.log
+     fi
+fi                              
