@@ -20,6 +20,6 @@ wd=$(pwd)
 
 for i in $(seq 1 $NumRep)
 do
-Rscript SelectQTLBeforeSimulation.R $NumQTL $NumNeu $i
+Rscript SelectQTL.R $NumQTL $NumNeu $i
 
 done
