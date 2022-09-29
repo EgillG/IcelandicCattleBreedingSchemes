@@ -1,10 +1,4 @@
-# Updated 11.08.2021 with numerous fixes
-# Can use marker-based matrices and pedigree
-# Fixed the funcSegQTL function
-# Uses bulls equally in each generation.
-# Writes relevant parameters (some of them) to a matrix, info.
-# SegAlleles currently does not work
-# 
+#  
 library(MoBPS)
 library(stringr)
 library(miraculix)
@@ -102,7 +96,8 @@ effects = rgamma(qtl, shape = 0.4, scale = 1.66)
 # hist(effects)
 # Make matrix for effects with five columns
 effx=matrix(nrow = qtl, ncol = 5)
-# Try and assign the minor allele always to be negative.
+# The probability in rbinom has to be changed from 0.5 if the distribution of allele effects if effects are supposed to be assigned according to frequency distribution.
+
 for (bla in 1:qtl) {
   # If A1 is the minor allele, there is a x% probability to assign negative effect
   if (snps[bla,]$A1==1) {
@@ -178,17 +173,6 @@ rm(frq)
 population <- add.array(population,
           marker.included = markerIncluded,
           array.name = "YarraY")
-
-#write.table(NeuList, "NeutralMarkers", quote = F,
-#            col.names = F,
-#            row.names = F)
-#write.table(markerIncluded, "GenotypingMarkers", quote = F,
-#            col.names = F,
-#            row.names = F)
-#write.table(effx,"effects",
-#            quote = F,
-#            row.names = F,
-#            col.names = F)
 print("Saving R image.")
 RDataFile <- paste("data_",args[3],".RData",sep="")
 rm(args)
