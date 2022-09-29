@@ -1,23 +1,9 @@
-funcMaf <- function(x){
-  # x is the input
-  #   If x is larger than 0.5, return 1-x
-  if (x > 0.5) {
-    return(1-x)
-  }  else {
-    return(x)
-  }
-}
-
-#Athuga að línur 81-83 fokka einhverju upp. Prófa að sleppa þeim.
-
 # Script to analyse results of simulations
 library(tidyverse)
 rm(list=ls())
-
+# set the proper working directory
 setwd("C:/Users/au589863/OneDrive - Aarhus universitet/Documents/phdProject4_Simulations/MoBPS/Results/46Test/")
 matrices = c("M1","M2","M2R","M2D","M1D","M1R","M1_05","Ped", "M1D_Est")
-#matrices = c("M1","M1D","M1R","Ped","M1_05")
-#matrices = c("M1","M2","M2D","M1D","M1R","M1_05","Ped")
 
 df = NULL
 for (scenario in matrices) {
@@ -110,8 +96,6 @@ df <- cbind(df[order(df$Scen),],res_maf[order(res_maf$Scen),4:5])
 
 library(dplyr)
 Old <- c("M1","M1D","M1D_Est","M1R","Ped", "M2","M2D", "M2R", "M1_05")
-# New <- c("VR1 All","VR1 Base","BaseVR1_Est","VR1 Current","Pedigree","VR2 All","VR2 Base","BaseVR2_Est","VR2 Current", "VR1 0.5")
-# For WCGALP presentation
 New <- c("VR1 All","VR1 Base","VR1 Old","VR1 Current","Pedigree","VR2 All","VR2 Base","VR2 Current", "VR1 0.5")
 
 df$Scen <- recode(df$Scen, !!!setNames(New,Old))
@@ -142,9 +126,6 @@ for (i in 1:9) {
   print(as.matrix(summary(lm1)$coefficients[(length(lm1$coefficients)-length(unique(df$Scen))+2):length(lm1$coefficients),4]))
 #  mat[i,c(1:9)[-i]] <-  tail(summary(lm1)$coefficients,8)[,4]
 }
-# 
-# mat <- mat[c(3,4,7,1,6,5,8,2,9), c(3,4,7,1,6,5,8,2,9)]
-# write.table(mat, "P-values.txt", sep = "\t")
 
 df1 <- df %>% group_by(Gen, Scen) %>% summarise(
   BV = mean(BV),
@@ -171,18 +152,6 @@ df1 <- df %>% group_by(Gen, Scen) %>% summarise(
 df1 <- df1[df1$Gen>5,]
 df1$Gen <- df1$Gen - 1
 
-bla <- df1[df1$Gen==max(df1$Gen),]
-
-'bla' <- bla[c(3,4,7,1,6,5,8,2,9),c(2,5,4,17,15,10,11,12,13)]
-bla <- cbind(bla[,1:5], c(bla$Kinship/bla$Kinship[9]), bla$stBV/bla$stBV[9], bla$stVarA/bla$stVarA[9], bla$stGenetVarA/bla$stGenetVarA[9],bla[,6:9])
-colnames(bla) <- c("Scenario", "Kinship", "BV","GeneticVar","GenicVar","%Kinship","%BV","%GeneticVar","%GenicVar","F_drift_neutral", "F_hom_neutral","F_drift_qtl","F_hom_qtl")
-
-write.table(bla, "LastGen.txt", sep = "\t")
-
-# dfLong <- gather(df1, key = "Parameter", value = "Value", 
-#                  c(Kinship, Inbreeding, F_drift_neutral, F_drift_markers, F_drift_qtl,
-#                    F_hom_neutral, F_hom_markers, F_hom_qtl))
-
 pl <- ggplot(data = df1, aes(x = -log(1-Kinship), y = stBV, colour = Scen, linetype = Scen)) +
   geom_line() +
   theme_minimal() +
@@ -205,165 +174,3 @@ pl <- ggplot(data = longdf, aes(x = -log(1-value), y = stBV, colour = Scen, line
   labs(color = "Scenario", linetype = "Scenario")
 pl
 ggsave("BV_Kinship_facets.png",height = 4, width = 7, dpi = 600) 
-
-pl <- ggplot(data = df1, aes(x = -log(1-F_hom_neutral), y = stBV, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Breeding value") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(y = -log(1-F_hom_neutral), x = Gen, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("F_hom_neutral") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = -log(1-F_hom_neutral), y = stBV, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  theme(legend.position="top") +
-  xlab("-log(F_hom)") +
-  ylab("Breeding value") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(y = -log(1-F_hom_markers), x = Gen, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("F_drift_neutral") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-
-pl <- ggplot(data = df1, aes(x = Gen, y = stBV, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Breeding value") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = Gen, y = -log(1-Kinship), colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("-log(1-Kinship)") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = Gen, y = Homo, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Breeding value") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = Gen, y = Homo, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Homozygosity") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = Gen, y = stGenetVarA, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Genetic variance") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = Gen, y = stVarA, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Genic variance") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = Gen, y = stBV, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Breeding value") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = stBV, y = stGenetVarA, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Genetic variance") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-pl <- ggplot(data = df1, aes(x = Gen, y = SegMarkers, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Genetic variance") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-pl <- ggplot(data = df1, aes(x = Gen, y = SegQTL, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Segregating QTL") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-pl <- ggplot(data = df1, aes(x = Gen, y = SegNeutral, colour = Scen, linetype = Scen)) +
-  geom_line() +
-  theme_minimal() +
-  ylab("Segregating neutral alleles") +
-  theme(legend.position="top") +
-  labs(color = "Scenario", linetype = "Scenario")
-pl
-
-
-#Compute MAF
-source("Functions_MoBPS_simulations_20_01_2022.R")
-
-maf <- matrix(nrow=21,ncol = 5)
-colnames(maf) <- c("Rep","Scen","Gen","MAF_qtl","MAF_Neutral")
-matrices = c("M1","M1D_Est","M2","M2R","M2D","M1D","M1R","M1_05","Ped")
-mafAll = NULL
-for (scenario in matrices) {
-  for (rep in 1:10) {
-    p_qtl <- read.table(paste(scenario,"_",rep,"_p_qtl.txt", 
-                              sep = ""))
-    p_neu <- read.table(paste(scenario,"_",rep,"_p_neutral.txt", 
-                              sep = ""))
-    for (i in 1:21){
-      bla_qtl <- apply(X = t(as.numeric(p_qtl[i,])), MARGIN = 2, FUN = funcMaf )
-      bla_neu <- apply(X = t(as.numeric(p_neu[i,])), MARGIN = 2, FUN = funcMaf )
-      maf[i,] <- c(rep,scenario,i,mean(bla_qtl), mean(bla_neu))
-    }
-    mafAll <- rbind(mafAll, maf)
-  }
-}
-mafAll <- data.frame(mafAll)
-mafAll$MAF_qtl <- as.numeric(mafAll$MAF_qtl)
-mafAll$MAF_Neutral <- as.numeric(mafAll$MAF_Neutral)
-mafAll$Gen <- as.numeric(mafAll$Gen)
-
-agg <- aggregate(mafAll[mafAll$Gen==max(mafAll$Gen),]$MAF_qtl,
-                 by = list(mafAll[mafAll$Gen==21,]$Scen),
-                 FUN = "median")
-maf1 <- mafAll %>% group_by(Gen, Scen) %>% summarise(
-  mean_qtl = mean(MAF_qtl),
-  mean_neutral = mean(MAF_Neutral))
-maf1[maf1$Gen==21,]
-
-write.table(maf1[maf1$Gen==21,],"maf.txt", quote = F, sep ="\t")
-
-ggplot(data = maf1,aes(x = Gen, y = mean_qtl, colour = Scen)) +
-  geom_line()
-
-##########################
