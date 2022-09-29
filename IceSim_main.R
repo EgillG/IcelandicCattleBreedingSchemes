@@ -4,7 +4,23 @@
 # Uses bulls equally in each generation.
 # Writes relevant parameters (some of them) to a matrix, info.
 # SegAlleles currently does not work
-# 
+# Updated 21.04.2022
+# Removed useless statistics from the info matrix.
+# Added variance of genetic values (genetic variance) to the info matrix
+# Fixed the genic variance in PBLUP generations
+# Now BLUP uses genetic variance as variance component, instead of genic.
+# M1D and M2D now uses generation 2 as base, to reduce the effect of sampling from generation 1 to 2.
+# F_hom and Fdrift computed with generation 2 as base in PBLUP and Pblupgen as base in genomic BLUP.
+
+# Updated 30th May 2022.
+# Fixed the genetic variance for simulation of phenotypes and breeding value estimation.
+# Now, the genetic variance of the base population is used for both.
+
+# Update 1st June 2022
+# Fixed an issue with writing out all genotypes for OCS. 
+# ATTENTION ATTENTION ATTENTION ATTENTION ATTENTION ATTENTION
+# The program does not work if MoBPS generations are more than 89. Need to put a test to check that gens < 89
+
 library(MoBPS)
 library(stringr)
 library(miraculix)
@@ -12,6 +28,8 @@ library(RandomFieldsUtils)
 library(plyr)
 library(dplyr)
 
+options(scipen = 100)
+RFoptions(warn_address=FALSE)
 
 # library(tidyverse)
 # library(plyr)
@@ -20,186 +38,46 @@ rm(list=ls())
 args = commandArgs(trailingOnly=TRUE)
 # args are: no. of repetition, method, number of selected bulls/generation
 print(args)
-# load QMSim data. 
-# 
-# Set Minor allele frequency threshold for G2 and G3
-G2Maf=0.5
-G3Maf=0.1
-# Set a frequency for markers to be qtl
-QTLMaf <- 0.5
-#Number of QTL
-qtl = 1000
+# Number of single step GBLUP evaluations
+numSS = 3
+# Truncation of generations for GBLUP
+GBLUPgens = 9
+# Proportion of males genotyped
 # Number of offspring each generation
-breedSize = 10000
+breedSize = 12000
+
+GenoSize = 2000
+#GenoSize = breedSize/2*0.25
+NeuMarkMAF <- 0.001
+# load QMSim data. 
+#Number of QTL
+qtl = 3000
 # Number of males and females selected each generation
 SelMales=as.integer(args[3])
 SelFemales=breedSize/2
 #heritability
 h2 = 0.4
-# Number of markers on each chromosome has to be set:
-numMarkers=1000
-# Number of Neutral marker alleles to track. Not currently in use.
-NeutralMarkers = 500
+#Number of neutral markers
+NeutralMarkers = 3000
 # Variable of maximum number of matings per bull (for OCS).
 #MaxMate=2000
 MaxMate=breedSize/SelMales
 # number of generations for PBLUP
-# Pblupgen needs to be 5. Do not change.
 Pblupgen = 5
-#ssGBLUP
-ssGBLUPgen = 15
+# Generations for ssGBLUP and GBLUP
+ssGBLUPgen = 16
 
+print(paste("Running simulation with ", Pblupgen, " generations of PBLUP and ", ssGBLUPgen," generations of genomic selection.",sep=""))
+print(paste("The number of animals simulated each generation is ", breedSize, " and the number of genotyped males is ", GenoSize , 
+    ". The number of generations to truncate for GBLUP is ", GBLUPgens, ". The number of generations using single step evaluation is ", numSS,sep=""))
 # Matrix for storing results of genetic gain, heterozygosity and inbreeding.
-info = matrix(nrow = (Pblupgen + ssGBLUPgen+1), ncol  = 6)
+info = matrix(nrow = (Pblupgen + ssGBLUPgen), ncol  = 15)
 info=data.frame(info)
-colnames(info) = c("BV", "Coancestry","Heteroz", "SegAlleles", "SegQTL", "DriftVar")
-# Matrix for storing allele frequency changes for computing drift variance
-# (variance of allele frequency changes)
-p = matrix(nrow = (Pblupgen + ssGBLUPgen+1), ncol  = qtl)
+colnames(info) = c("BV", "Kinship","SelfRel","Heteroz", "SegAlleles", "SegQTL", "SegNeutral","F_drift_n","F_hom_n","F_drift_qtl","F_hom_qtl","F_drift_m","F_hom_m","varA","GeneticVarA")
+source("../Functions_MoBPS_simulations_20_01_2022.R")
 
-#####################
-#define functions
-#####################
-# function to check whether alleles are segregating or fixed.
-# Might be better to return 0 or 1 depending on fixation, to reduce memory use.
-func <- function(x) {
-  if (length(table(x)) == 1){
-    # if length of table is 1, one allele or the other is fixed.
-    # 0 is assigned to a fixed allele, 1 to a segregating allele.
-    return(0)
-  }
-  else {
-    return(1)
-  }
-}
-# This function does the same as before, but on different data, so it counts whether
-# number of animals homozygous for one QTL allele is equal to the number of loci
-funcSegQTL <- function(x){
-  # x is the input frequencies (homo1,hetero,homo2)
-  # If homo1 and hetero is 0, return 0, or if 
-  # hetero and homo2 is 0, return 0
-  # which means the QTL is fixed.
-  if (x[1] == 0 & x[2] == 0) {
-    return(0)
-  }
-  else if (x[2] == 0 & x[3] == 0) {
-    return(0)
-  }
-  else {
-    return(1)
-  }
-}
-
-
-# return minor allele frequency from vector of frequencies.
-funcMaf <- function(x){
-  # x is the input
-  #   If x is larger than 0.5, return 1-x
-  if (x > 0.5) {
-    return(1-x)
-  }  else {
-    return(x)
-  }
-
-}
-mapfile = paste("../../QMSim/data_",args[1],".map",sep="")
-pedfile = paste("../../QMSim/data_",args[1],".ped",sep="")
-freqfile = paste("../../QMSim/plink_",args[1],".frq",sep="")
-map <- as.matrix(read.table(mapfile))
-ped <- as.matrix(read.table(pedfile))
-
-# read .frq file:
-frq <- read.table(freqfile)
-# write SNP and chromosome number to a dataframe QTLsnp.
-QTLsnp = frq[,c(1,2,3,4,5)]
-# Make some filtering on allele frequencies for QTL
-# QTLsnp <- frq[frq$V5<QTLMaf & frq$V5>0,c(1,2,3,4,5)]
-
-# Seems to convert centimorgans into morgans.
-map[,3]=as.numeric(map[,3])*0.01
-
-# Convert PED-file into haplotype dataset (one haplotype per colum)
-# This is according to page 26 in the MoBPS manual.
-nsnp <- (ncol(ped)-6)/2
-haplo1 <- ped[,1:nsnp*2+6-1]
-haplo2 <- ped[,1:nsnp*2+6]
-haplo <- t(rbind(haplo1, haplo2)[c(0,nrow(haplo1)) + sort(rep(1:nrow(haplo1),2)),])
-# I set dataset = haplo-1. It seems that dataset=haplo gives wrong results.
-# I think that bpcm.conversion does not make a difference.
-population <- creating.diploid(dataset = haplo-1,
-                               map = map,
-                               bpcm.conversion = 0,
-                               share.genotyped = 0)
-summary(population)
-
-# get.map exports a matrix with map information:
-# chromosome, snp-name, bp-position, morgan position
-# my map does not have position because QMSim only outputs Morgans, not physical distances.
-snpmap = get.map(population, use.snp.nr = TRUE)[,c(1,2)]
-# snpnr is the running number of the SNP
-snpnr = get.map(population, use.snp.nr = FALSE)[,c(2)]
-# bind these two together to have an object with snp nr. and snp chromosome number
-snpmap = cbind(snpmap,snpnr)
-# I randomly sample markers to assign effects.
-# Here I have to sample markers with allele frequency below 10%.
-# head(QTLsnp)
-# head(snpmap)
-# Remove the header line from QTLsnp
-QTLsnp = QTLsnp[-1,]
-# merge qtlsnps with the snpmap, 
-snps = merge(snpmap,QTLsnp, by.x = "snpnr", by.y = "V2")
-# remove unnecessary columns
-snps = snps[,c(2,3,5,6,7)]
-# set column names
-colnames(snps) = c("CHR","SNP","A1","A2","MAF")
-# observe the snps data frame
-head(snps)
-tail(snps)
-# filter the markers
-# Draw alleles with MAF < 0.1 and MAF > 0.
-snps = snps[snps$MAF<QTLMaf & snps$MAF > 0,]
-# randomly draw markers to be QTL, qtl object is the number of QTL
-snps = snps[sample(nrow(snps),qtl),]
-# dim(snps)
-# order the dataframe according to chromosome and SNP within chromosome
-snps = snps[order(snps$CHR,snps$SNP),]
-# head(snps)
-
-# Have to specify (draw) markers to be effect markers.
-# First simulate the distribution, using random gamma
-effects = rgamma(qtl, 1, 1)
-# plot(effects)
-# hist(effects)
-# Make matrix for effects with five columns
-effx=matrix(nrow = qtl, ncol = 5)
-# Try and assign the minor allele always to be negative.
-for (bla in 1:qtl) {
-  # If A1 is the minor allele, there is a x% probability to assign negative effect
-  if (snps[bla,]$A1==1) {
-    if (rbinom(1,1,0.8)==1) {
-    effx[bla,] = c(as.numeric(snps[bla,2]),as.numeric(snps[bla,1]), -effects[bla],0, effects[bla])
-    }
-    else {
-      effx[bla,] = c(as.numeric(snps[bla,2]),as.numeric(snps[bla,1]), effects[bla],0, -effects[bla])
-    }
-    #    print(paste("YES A1:",snps[bla,]$A1, snps[bla,]$MAF, -effects[bla]))
-    }
-  # else if A2 is the minor allele, there is a 1-x probability to assign negative effect
-  else {
-    if (rbinom(1,1,0.8)==1) {
-      effx[bla,] = c(as.numeric(snps[bla,2]),as.numeric(snps[bla,1]), effects[bla],0, -effects[bla])
-    }
-    else {
-      effx[bla,] = c(as.numeric(snps[bla,2]),as.numeric(snps[bla,1]), -effects[bla],0, effects[bla])
-    }
-   }
-}
-# head(effx)
-# tail(effx)
-# dim(effx)
-# View(effx)
-population = creating.trait(population, real.bv.add = effx)
-
+RDatafile = paste("../../QMSim_11_02_2022/data_",args[1],".RData",sep="")
+load(RDatafile)
 
 cohorts = c(length = (Pblupgen+ssGBLUPgen)*2+2)
 cohorts[1] = "Cohort_1_M"
@@ -207,178 +85,12 @@ cohorts[2] = "Cohort_1_F"
 # Set index for cohorts matrix
 cohIndex = 3
 
-# Set values for cohort one into info matrix
-# Get kinship from IBD. 
-info[1,2] <- kinship.emp.fast(population = population, gen = 1,ibd.obs = breedSize/10, hbd.obs = breedSize/10)[1]
-population <- breeding.diploid(population, 
-                               heritability = 0.4, 
-                               phenotyping = "non_obs_f",
-                               # phenotyping = "non_obs_f", # phenotype non-phenotyped females
-                               bve = TRUE, # estimate breeding values
-                               relationship.matrix="kinship", # use pedigree relationships
-                               bve.cohorts = cohorts, # Generations of individuals to consider in bve
-                               share.genotyped = 0,
-                               store.effect.freq = TRUE)
-bv <- get.bv(population, gen = 1)
-info[1,1] <- mean(bv)
-df=data.frame(get.effect.freq(population, gen = 1))
-# info$real.bv.add : Lists with an overview of all single marker QTLs for each trait
-head(population$info$real.bv.add[[1]][,c(1,3,4,5)])
-# take out the effects
-effects = data.frame(population$info$real.bv.add[[1]][,c(1,2,3,4,5)])
-head(effects)
-# change to character
-effects$X1=effects$X1 + (effects$X2-1)*numMarkers
-effects$X1=as.character(effects$X1)
-effects = effects[,-2]
-# find the frequencies.
-head(df)
-df$X1 = row.names(df)
-# merge 
-mrg = merge(effects, df, by = "X1")
-mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
-p[1,] <- mrg$freq0
-# pring mean heterozygosity and store in info matrix.
-print(c("mean heterozygosity of QTL, gen:", paste(1), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
-info[1, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
-freq1=data.frame(mrg[,c(2,8)])
-freq2=data.frame(mrg[,c(4,9)])
-afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
-sum(afi)
-info[1, 5] <- sum(afi)/qtl
-# compute total heterozygosity of markers and number of fixed alleles
-# Get genotypes: 
-bl=get.geno(population, gen = 1)
-# Assign
-fixSeg <- apply(bl, MARGIN = 1, FUN = func)
-# Sum of fixSeg is the number of segregating alleles
-sum(fixSeg)
-# Put in percentage of alleles segregating.
-info[1,4] <- sum(fixSeg)/length(fixSeg)
-colnames(freq1) = c("effect","frequency")
-colnames(freq2) = c("effect","frequency")
-dat = rbind(freq1,freq2)
-#plot(dat$frequency,dat$effect)
-gen=2
 
-# Add a genotyping array
-# Do not use QTL, but assign markers evenly spaced over the genome.
-qtlList = get.qtl(population)
+# Matrix for storing allele frequency changes 
+p_qtl = matrix(nrow = (Pblupgen + ssGBLUPgen), ncol  = qtl)
+p_marker = matrix(nrow = (Pblupgen + ssGBLUPgen), ncol  = sum(markerIncluded))
+p_neutral = matrix(nrow = (Pblupgen + ssGBLUPgen), ncol  = sum(NeuList))
 
-markerIncluded = rep(TRUE,population$info$snp[1]*population$info$chromosome)
-for (i in qtlList) {
-  markerIncluded[i] = FALSE
-}
-population <- add.array(population,
-          marker.included = markerIncluded,
-          array.name = "YarraY")
-
-
-for(gen in 1:Pblupgen+1){
-    print(paste("PBLUP Generation: ", gen))
-    population <- breeding.diploid(population, 
-                                   heritability = 0.4, 
-                                   phenotyping.cohorts = c(cohorts[cohIndex-3]), 
-                                   bve = TRUE, # estimate breeding values
-                                   relationship.matrix="kinship", # use pedigree relationships
-                                   bve.cohorts = cohorts, # Generations of individuals to consider in bve
-                                   share.genotyped = 0)
-
-   print(paste("phenotypes for cohort", cohorts[cohIndex-3],"were generated for generation ",gen))
-   # Generate a copy of the selected bulls.
-   population <- breeding.diploid(population, 
-                                  selection.size = c(SelMales,SelFemales),
-                                  copy.individual.m = TRUE,
-                                  share.genotyped = 0,                                  #add.gen = gen-1,
-                                  selection.criteria = "bve",
-                                  selection.f.cohorts = cohorts[cohIndex-1],
-                                  selection.m.cohorts = cohorts[cohIndex-2],
-                                  name.cohort = paste("SelectedBulls",gen-1, sep=""))
-   # Genotype the copies.
-   population <- breeding.diploid(population,
-                                  genotyped.cohorts = paste("SelectedBulls",gen-1, sep=""),
-                                  genotyped.array = 2
-                                  )  
-   print(paste(cohorts[cohIndex-2]," were used for generating copies to genotype: ","SelectedBulls",gen-1,sep=""))
-   
-   # Apply selection, here I have to set the number of matings so that females
-   # have 1 offspring each
-   population <- breeding.diploid(population, 
-                                 breeding.size = breedSize,
-                                 name.cohort = paste("PBLUP",gen, sep=""),
-                                 selection.size = c(SelMales,SelFemales),
-                                 heritability = 0.4,
-                                 selection.f.cohorts = cohorts[cohIndex-1],
-                                 selection.m.cohorts = paste("SelectedBulls",gen-1, sep=""),
-                                 selection.criteria = "bve",
-                                 share.genotyped = 0,
-                                 max.mating.pair = 2,
-#                                 max.offspring = c(breedSize/SelMales,2),
-                                 store.effect.freq = TRUE)
-
-        # To compute the heterozygosity
-        df=data.frame(get.effect.freq(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2])))
-        # info$real.bv.add : Lists with an overview of all single marker QTLs for each trait
-        head(population$info$real.bv.add[[1]][,c(1,3,4,5)])
-        # take out the effects
-        effects = data.frame(population$info$real.bv.add[[1]][,c(1,2,3,4,5)])
-        head(effects)
-        # change to character
-        effects$X1=effects$X1 + (effects$X2-1)*numMarkers
-        effects$X1=as.character(effects$X1)
-        effects = effects[,-2]
-        # find the frequencies.
-        head(df)
-        df$X1 = row.names(df)
-        # merge 
-        mrg = merge(effects, df, by = "X1")
-        mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
-        p[gen,] <- mrg$freq0
-        info[gen,6] <- var(p[gen,]-p[gen-1,])
-        # print mean heterozygosity and store in info matrix.
-        print(c("mean heterozygosity of QTL, gen:", paste(gen), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
-        info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
-        freq1=data.frame(mrg[,c(2,8)])
-        freq2=data.frame(mrg[,c(4,9)])
-        afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
-        sum(afi)
-        info[gen, 5] <- sum(afi)/qtl
-        # compute total heterozygosity of markers and number of fixed alleles
-        # Get genotypes: 
-        bl=get.geno(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        # Assign
-        fixSeg <- apply(bl, MARGIN = 1, FUN = func)
-        # Sum of fixSeg is the number of segregating alleles
-        sum(fixSeg)
-        # Put in percentage of alleles segregating.
-        info[gen,4] <- sum(fixSeg)/length(fixSeg)
-        colnames(freq1) = c("effect","frequency")
-        colnames(freq2) = c("effect","frequency")
-        dat = rbind(freq1,freq2)
-        #plot(dat$frequency,dat$effect)
-        # hist(dat$frequency, breaks = 100)
-        # Get kinship from IBD. 
-        info[gen,2] <- kinship.emp.fast(population = population,
-                                              cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]),
-                                              ibd.obs = breedSize/10,
-                                              hbd.obs = breedSize/10)[1]
-        bv <- get.bv(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        info[gen,1] <- mean(bv)
-  # Replace previous male generation with selected bulls by updating the cohort vector
-  cohorts[cohIndex-2] =  paste("SelectedBulls",gen-1, sep="")
-  # Assign the males to cohIndex.
-  cohorts[cohIndex] =  paste("PBLUP",gen,"_M", sep="")
-  # Assign females to cohIndex + 1
-  cohorts[cohIndex + 1] =  paste("PBLUP",gen,"_F", sep="")
-  cohIndex =+ cohIndex+2
-  print(paste(cohorts,"generation", gen))
-            }
-summary(population)
-cohorts
 # Construct two vectors to replace MoBPS generation values with actual generation values
 # Repeat the mobps generations, they are Pblup + ssGBLUP + 1 (founder)
 # Maybe this can all be replaced by add.gen
@@ -389,199 +101,553 @@ MoBPSGen = c(1:(2*(Pblupgen+ssGBLUPgen+1)))
 sbla = seq(2,2,length.out = (length(MoBPSGen)%/%2))
 # build the vector using rep.
 ve = rep(1:(length(MoBPSGen)%/%2), times = sbla)
-gen=7
+
+for(gen in 1:(Pblupgen)){
+  #RDataFile <- paste(args[2],"_",args[1],gen,"PBLUP.RData",sep="")
+  #save.image(file=RDataFile)
+    print(paste("PBLUP Generation: ", gen))
+    print("phenotyping cows")
+if (gen==1) {
+varABase = sd(get.bv(population = population, cohorts=c("Cohort_1_M", "Cohort_1_F")))**2
+varEBase = ((1-h2)/h2)*varABase
+}
+print(paste("Using a residual variance of:", round(varEBase,3), sep = " "))
+print(paste("Using a genetic variance of:", round(varABase,3),"for a heritability of", h2, sep=" "))
+    population <- breeding.diploid(population,
+                                   sigma.e = varEBase,
+                                   phenotyping.cohorts = c(cohorts[cohIndex-1]),
+                                   bve = FALSE, # estimate breeding values
+                                   mutation.rate = 0,
+                                   remutation.rate = 0,
+                                   share.genotyped = 0)
+   print(paste("phenotypes for cohort", cohorts[cohIndex-1],"were generated for generation ",gen))
+
+    print("Running Pedigree based evaluation in DMU")
+ped <- data.frame(get.pedigree(population, cohorts = cohorts))
+ped2 = data.frame(get.pedigree(population, cohorts = cohorts, id = T))
+matc=data.frame(ped$offspring, ped2$offspring)
+colnames(matc) = c("ID","RecodeID")
+matc$RecodeID <- as.integer(matc$RecodeID)
+rm(ped,ped2)
+pedig <- data.frame(get.pedigree(population, cohorts = cohorts))
+# Put in generation number (not exactly correct but good enough):
+pedig$Generation <- substr(str_extract(pedig$offspring,"_.$"),2,2)
+pedig[is.na(pedig$Generation),]$Generation <- substr(str_extract(pedig[is.na(pedig$Generation),]$offspring,"_..$"),2,3)
+pedig$Generation <- mapvalues(pedig$Generation, MoBPSGen, ve, F)
+
+pedig$offspring <- mapvalues(pedig$offspring, matc$ID, matc$RecodeID, warn_missing = F)
+pedig$father <- mapvalues(pedig$father, matc$ID, matc$RecodeID, warn_missing = F)
+pedig$mother <- mapvalues(pedig$mother, matc$ID, matc$RecodeID, warn_missing = F)
+pedig <- unique(pedig)
+pedig <- pedig[pedig$father!=pedig$offspring,]
+if (gen > 1) {
+	pedig[substr(pedig$father,1,1)=="M",]$father <- 0
+	pedig[substr(pedig$mother,1,1)=="M",]$mother <- 0
+             }
+write.table(pedig, 
+            "pedigree.txt",
+            row.names = FALSE, 
+            col.names = FALSE,
+            quote = FALSE, 
+            sep = " ")
+
+pheno = data.frame(t(get.pheno(population, cohorts = cohorts)))
+pheno$ID <- rownames(pheno)
+pheno$ID <- mapvalues(pheno$ID, matc$ID, matc$RecodeID, F)
+pheno$mean = 1
+pheno[is.na(pheno)] <- -9999
+pheno$Trait.1 <- round(pheno$Trait.1,4)
+pheno = pheno[,c(2,3,1)]
+write.table(pheno, "phenotypes.txt",
+            row.names = FALSE, 
+            col.names = FALSE,
+            quote = FALSE, 
+            sep = " ")
+rm(pheno)
+# write the necessary variances (I use the true values)
+   cohortsAll <- get.cohorts(population)
+   lenCo <- length(get.cohorts(population))
+# Use genetic variance of the base for breeding value estimation.
+varABase = sd(get.bv(population = population, cohorts=c("Cohort_1_M", "Cohort_1_F")))**2
+varEBase = ((1-h2)/h2)*varABase
+write.table(rbind(c(1,1,1, varABase),c(2,1,1,varEBase)),
+                "variances.txt",
+                row.names = FALSE,
+                col.names = FALSE,
+                quote = F,
+                sep = " ")
+
+system("bash r_dmu5 dmuPBLUP")
+system("awk '{print $5,$8}' dmuPBLUP.SOL > temp")
+dmuBVE = data.frame(read.table("temp", skip = 2, stringsAsFactors = F))
+dmuBVE$V1 <- mapvalues(dmuBVE$V1, matc$RecodeID, matc$ID, F)
+population <- insert.bve(population, dmuBVE)
+print("generating a copy of selected bulls")
+   # Generate a copy of the selected bulls.
+   population <- breeding.diploid(population, 
+                                  selection.size = c(SelMales*3,SelFemales),
+                                  copy.individual.m = TRUE,
+                                  share.genotyped = 0,                                  #add.gen = gen-1,
+                                  selection.criteria = "bve",
+                                  selection.f.cohorts = cohorts[cohIndex-1],
+                                  selection.m.cohorts = cohorts[cohIndex-2],
+                                  mutation.rate = 0,
+                                  remutation.rate = 0,
+                                  name.cohort = paste("SelectedBulls",gen, sep=""))
+   # Genotype the copies.
+   population <- breeding.diploid(population,
+                                  genotyped.cohorts = paste("SelectedBulls",gen, sep=""),
+                                  genotyped.array = 2,
+                                  mutation.rate = 0,
+                                  remutation.rate = 0
+                                  )  
+   print(paste(cohorts[cohIndex-2]," were used for generating copies to genotype: ","SelectedBulls",gen,sep=""))
+   
+   # Apply selection, here I have to set the number of matings so that females
+   # have 1 offspring each
+   population <- breeding.diploid(population, 
+                                 breeding.size = breedSize,
+                                 name.cohort = paste("PBLUP",gen+1, sep=""),
+                                 selection.size = c(3*SelMales,SelFemales),
+                                 #heritability = 0.4,
+                                 miraculix.cores = 4,
+                                 selection.f.cohorts = cohorts[cohIndex-1],
+                                 selection.m.cohorts = paste("SelectedBulls",gen, sep=""),
+                                 selection.criteria = "bve",
+                                 share.genotyped = 0,
+                                 max.mating.pair = 2,
+                                 max.offspring = c(breedSize/SelMales,2),
+                                 mutation.rate = 0,
+                                 remutation.rate = 0,
+                                 store.effect.freq = TRUE)
+population <- clean.up(population)
+#Genotype females of the last PBLUP generation
+if (gen == Pblupgen) {
+population <- breeding.diploid(population,
+                               genotyped.cohorts = cohorts[cohIndex-1], #genotype all females of last generation
+                               mutation.rate = 0,
+                               genotyped.array = 2,
+                               remutation.rate = 0,
+                               bve = FALSE)
+                               }
+# This is to genotype generation = gen (all selection candidates)
+   cohortsAll <- get.cohorts(population)
+   lenCo <- length(get.cohorts(population))
+# Start obtaining genomic information
+   mrg <- getHet(population, c(cohortsAll[lenCo-3], cohortsAll[lenCo-4]),qtl)
+   p_qtl[gen,] <- mrg$freq0
+   info[gen,1:7] <- getAll(mrg, gen, c(cohortsAll[lenCo-3], cohortsAll[lenCo-4]), population, funcSegQTL, func)
+   p_marker[gen,] <- get_p(population, c(cohortsAll[lenCo-3], cohortsAll[lenCo-4]), markerIncluded) 
+   p_neutral[gen,] <- get_p(population, c(cohortsAll[lenCo-3], cohortsAll[lenCo-4]), NeuList) 
+
+   info[gen,8] = F_drift(p_neutral, gen, 2)
+   info[gen,9] = F_hom(p_neutral, gen, 2)
+   info[gen,10] = F_drift(p_qtl, gen, 2)
+   info[gen,11] = F_hom(p_qtl, gen, 2)
+   info[gen,12] = F_drift(p_marker, gen, 2)
+   info[gen,13] = F_hom(p_marker, gen, 2)
+
+   info[gen,14] = sum(get.qtl.variance(population = population, cohorts=c(cohortsAll[lenCo-3], cohortsAll[lenCo-4]))[[1]][,3])
+   info[gen,15] = sd(get.bv(population = population, cohorts=c(cohortsAll[lenCo-3], cohortsAll[lenCo-4])))**2
+
+   print(round(info,4))
+
+  # Replace previous male generation with selected bulls by updating the cohort vector
+  cohorts[cohIndex-2] =  paste("SelectedBulls",gen, sep="")
+  # Assign the males to cohIndex.
+  cohorts[cohIndex] =  paste("PBLUP",gen+1,"_M", sep="")
+  # Assign females to cohIndex + 1
+  cohorts[cohIndex + 1] =  paste("PBLUP",gen+1,"_F", sep="")
+  cohIndex =+ cohIndex+2
+  print(cohorts)
+  print(paste("generation", gen))
+            }
+cohorts
+gen=Pblupgen+1
 print("Info matrix looks like this before ssGBLUP stage:\n")
 print(info)
+print("starting genomic selection")
+
 # 
 ###############################################################################
 # Start of genomic selection
-for (gen in (Pblupgen+2):(ssGBLUPgen+Pblupgen+1)){
+for (gen in (Pblupgen+1):(ssGBLUPgen+Pblupgen)){
+ptmLong <- proc.time()
+#RDataFile <- paste(args[2],"_",args[1],gen,"GenomicSel.RData",sep="")
+#save.image(file=RDataFile)
+
+print(paste("list of cohorts when genomic selection starts in generation ",gen, ":", toString(cohorts), sep=""))
 # Here select 2000 bulls based on parent average to be genotyped.
 # Check whether the parent mean is computed correctly (for the selection candidates)
 population <- breeding.diploid(population,
                                bve.parent.mean = TRUE,
-                               bve.insert.cohorts = cohorts[cohIndex-2]
-                               )
+                               bve.insert.cohorts = cohorts[cohIndex-2],
+                               mutation.rate = 0,
+                               remutation.rate = 0
+                                  )
 # Now use the parent mean to preselect bulls for genotyping
 population <- breeding.diploid(population,
-                               selection.size = breedSize/2*0.5,
+                               selection.size = GenoSize,
                                copy.individual.m = TRUE,
                                selection.criteria = "bve",
                                selection.m.cohorts = cohorts[cohIndex-2],
-#                               add.gen = Pblupgen+gen-2, #check if this is correct.
-                               name.cohort = paste("GenoBulls",gen-1, sep=""))
-cohorts[cohIndex-2] <- paste("GenoBulls",gen-1, sep="")
+                               mutation.rate = 0,
+                               genotyped.array = 2,
+                               remutation.rate = 0,
+#                              add.gen = Pblupgen+gen-2, #check if this is correct.
+                               name.cohort = paste("GenoBulls",gen, sep=""))
+cohorts[cohIndex-2] <- paste("GenoBulls",gen, sep="")
 print(paste("her er eg a undan ebv, kynslod: ",gen))
+
 # Female parents of selection candidates are phenotyped, but not males.
 # All females in the current generation are genotyped at this stage
+print(paste("Using a residual variance of:", varEBase,"to simulate phenotypes", sep = " "))
 population <- breeding.diploid(population,
                                phenotyping.cohorts = cohorts[cohIndex-3], #phenotype previous generation
                                genotyped.cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]), #genotype all females, and 2000 bulls
-                               heritability = 0.4,
-                               bve = TRUE,
-                               relationship.matrix="vanRaden",
-                               remove.effect.position = TRUE,
-                               singlestep.active = TRUE,
-                               bve.cohorts = cohorts,
-                               genotyped.array = 2)
-#                                 bve.gen=1:(index*2+1))# Has to be 10 or 11 because the copied individuals
-#                                 above (for genotyping of bulls) get their own generation.
+                               genotyped.array = 2,
+                               sigma.e = varEBase,
+                               mutation.rate = 0,
+                               remutation.rate = 0,
+                               bve = FALSE)
 print(paste("her er eg aftur eftir ebv, kynslod: ",gen))
 
-###############################################################################
-# Try OCS
-###############################################################################
-# Is the pedigree containing all the relevant animals? 
-# Maybe produce whole pedigree rather than specify cohorts.
-# Start here to construct the pedigree for input to EVA.
-# First take out the whole pedigree, to make lists of IDs to convert.
-ped <- data.frame(get.pedigree(population, gen = 1:length(population$breeding)))
-
-matc=data.frame(ped$offspring, row.names(ped))
+# Now use DMU for single step breeding value estimation.
+## First write necessary files.
+ped <- data.frame(get.pedigree(population, cohorts = get.cohorts(population)))
+ped2 = data.frame(get.pedigree(population, cohorts = get.cohorts(population), id = T))
+matc=data.frame(ped$offspring, ped2$offspring)
 colnames(matc) = c("ID","RecodeID")
-ped <- get.pedigree(population, cohorts = cohorts)
-ped <- data.frame(ped)
-# Assign sex
-# First assign all animals as 1 (males)
-ped$sex = "1"
-# Assign 2 to animals with F as their last letter
-ped[substr(ped$offspring,1,1) == "F",]$sex = "2"
-# Use regular expressions to add a column with generation number
-# Start by generations 1-9, look for rows with _ followed by any character.
-# Print the character after _.
-ped$Generation <- substr(str_extract(ped$offspring,"_.$"),2,2)
-# Next find row with _ followed by two characters. Print two characters after _
-ped[is.na(ped$Generation),]$Generation <- substr(str_extract(ped[is.na(ped$Generation),]$offspring,"_..$"),2,3)
-# Make column with maximum matings for input to EVA
-ped$maxmatings = 0
-# Modify generation values using mapvalues from the plyr package
-# Males with _3 are generation 2.
-# Females with _4 are 3 and males with _5 are also 3 etc.
-ped$Generation = mapvalues(ped$Generation, MoBPSGen, ve)
-# change to integer
-ped$Generation = as.integer(ped$Generation)
-# Set maxmatings to value MaxMate for selection candidates. Set to 1 for all females in
-# generation gen, and to 0 for bulls with ebv lower than mean ebv
-# Make a column maxmatings. Start by assigning all animals in the current 
-# generation to MaxMate
-ped[ped$Generation == gen-1,]$maxmatings = MaxMate
-# Assign females in current generation to 1 mating
-ped[ped$Generation == gen-1 & ped$sex == "2",]$maxmatings = 1
-# make matrix of ebvs.
-bve <- get.bve(population, cohorts = cohorts)
-# The input to EVA, evaIn contains ped and ebvs.
-# Use merge to combine ped and bve.
-evaIn <- merge(ped, data.frame(t(bve)), by.x = "offspring", by.y = "row.names", sort = F, all.x = TRUE)
-evaIn$maxmatings=as.character(evaIn$maxmatings)
-# Apply truncation selection here on the GEBVs, only 20% best bulls are selecte
-# This simply takes the last breedsize/4 number of bulls in the evaIn file (which should be the genotyped bulls)
-evaIn[(dim(evaIn)[1]-breedSize/4):(dim(evaIn)[1]),]$maxmatings = MaxMate
+matc$RecodeID <- as.integer(matc$RecodeID)
+rm(ped,ped2)
 
-#Big <- merge(ped, data.frame(t(pheno)), by.x = "offspring", by.y = "row.names", sort = F)
-tail(evaIn)
-#evaIn=evaIn[order(evaIn$Generation),]
-evaIn$ID = mapvalues(evaIn$offspring,matc$ID,matc$RecodeID, warn_missing = FALSE)
-evaIn=evaIn[,c(8,2,3,4,5,6,7,1)]
+pedig <- data.frame(get.pedigree(population, cohorts = cohorts))
+# Put in generation number (not exactly correct but good enough):
+pedig$Generation <- substr(str_extract(pedig$offspring,"_.$"),2,2)
+pedig[is.na(pedig$Generation),]$Generation <- substr(str_extract(pedig[is.na(pedig$Generation),]$offspring,"_..$"),2,3)
+pedig$Generation <- mapvalues(pedig$Generation, MoBPSGen, ve, F)
 
-#make dataframe of individual MoBPS IDs and IDs for EVA.
-evaIn$mother <- mapvalues(evaIn$mother,matc$ID,as.integer(matc$RecodeID), warn_missing = FALSE)
-evaIn$father <- mapvalues(evaIn$father,matc$ID,matc$RecodeID, warn_missing = FALSE)
+pedig$offspring <- mapvalues(pedig$offspring, matc$ID, matc$RecodeID, warn_missing = F)
+pedig$father <- mapvalues(pedig$father, matc$ID, matc$RecodeID, warn_missing = F)
+pedig$mother <- mapvalues(pedig$mother, matc$ID, matc$RecodeID, warn_missing = F)
+pedig <- unique(pedig)
+#pedig <- pedig[pedig$father!=pedig$offspring,]
+pedig[pedig$father==pedig$offspring,]$father <- 0
+pedig[pedig$mother==pedig$offspring,]$mother <- 0
+write.table(pedig, 
+            "pedigree.txt",
+            row.names = FALSE, 
+            col.names = FALSE,
+            quote = FALSE, 
+            sep = " ")
 
-colnames(evaIn)=c("ID", "sire", "dam", "sex" ,"generation", "maxmatings", 
-                    "ebv","MoBPSID")
-evaIn$ebv = round(evaIn$ebv, 2)
-#evaIn[is.na(evaIn$ID),]$ID = 0
-evaIn$ID=as.integer(evaIn$ID)
-evaIn=evaIn[order(as.integer(evaIn$generation),as.integer(evaIn$ID)),]
-evaIn[evaIn$maxmatings != 0 & evaIn$sex==1,]$maxmatings=1
-evaIn2=evaIn[evaIn$maxmatings != 0 & evaIn$sex==1,]
-meanEBV=mean(evaIn[evaIn$sex==2& evaIn$maxmatings>0,]$ebv)
-evaIn2=rbind(evaIn2,c("00001","0","0",2,gen-1,args[3],meanEBV,"PseudoFemale"))
-write.table(evaIn2, "evaIn.txt", 
-            quote = FALSE, sep = "\t",
-            row.names = FALSE, col.names = FALSE)
-write.table(evaIn[,c(1,4,6)], "SelCands",
-            quote = FALSE, sep = "\t",
-            row.names = FALSE, col.names = FALSE)
 
-# Write genotypes if marker-based GMATRIX is used
-  if (substr(args[2],1,1) == "M") { 
-    # Here I retrieve the genotypes of desired cohorts
-    genos = t(get.geno(population, 
-                       cohorts = cohorts[-c(2,4,6,8,10)],
-                       non.genotyped.as.missing = TRUE))
-    genos = data.frame(genos)
+# Variable for cohorts to use. Uses truncation after GBLUPgens is passed
+
+if ((gen-Pblupgen-1) < GBLUPgens) {
+     cohorts_to_use <- cohorts[-seq(2, to = (Pblupgen-1)*2, by = 2)]
+} else {
+     print(paste("Start truncation of genomic information in generation: ", gen,". Using ",GBLUPgens," generations to form G-matrix."))
+     cohorts_to_use <- cohorts[(cohIndex-2*GBLUPgens):(cohIndex-1)]
+}
+print("Writing phenotypes.")
+pheno = data.frame(t(get.pheno(population, cohorts = cohorts_to_use)))
+pheno$ID <- rownames(pheno)
+pheno$ID <- mapvalues(pheno$ID, matc$ID, matc$RecodeID, F)
+pheno$mean = 1
+pheno$Trait.1 <- round(pheno$Trait.1,4)
+pheno = pheno[,c(2,3,1)]
+write.table(na.omit(pheno), "phenotypes.txt",
+            row.names = FALSE,
+            col.names = FALSE,
+            quote = FALSE,
+            sep = " ")
+rm(pheno)
+
+print("Writing and transposing genotype data.")
+ptm <- proc.time()
+#system("rm Gmatrix/gmat.dat Gmatrix/gmat.id")
+if (gen==Pblupgen+1) {
+    coSel <- 1:length(cohorts_to_use)
+    system("rm Gmatrix/gmat.dat Gmatrix/gmat.id")
+    } else if ((gen-Pblupgen-1) >= GBLUPgens) {
+    # use tail to select the individuals included in cohorts_to_use, minus the current generation.
+
+    argument <- paste("head -n -", breedSize," Gmatrix/gmat.dat > Gmatrix/temp", sep="")
+    system(argument)
+    system("mv Gmatrix/temp Gmatrix/gmat.dat")
+    argument <- paste("head -n -", breedSize," Gmatrix/gmat.id > Gmatrix/temp", sep="")
+    system(argument)
+    system("mv Gmatrix/temp Gmatrix/gmat.id")
+
+    argument <- paste("tail -n ", dim(get.bv(population, cohorts = cohorts_to_use))[2]-GenoSize-breedSize/2-as.numeric(args[3])-breedSize/2," Gmatrix/gmat.dat > Gmatrix/temp", sep="")
+    system(argument)
+    system("mv Gmatrix/temp Gmatrix/gmat.dat")
+    argument <- paste("tail -n ", dim(get.bv(population, cohorts = cohorts_to_use))[2]-GenoSize-breedSize/2-as.numeric(args[3])-breedSize/2," Gmatrix/gmat.id > Gmatrix/temp", sep="")
+    system(argument)
+    system("mv Gmatrix/temp Gmatrix/gmat.id")
+    system("wc -l Gmatrix/gmat.id | echo")
+    print("Number of lines in Gmatrix/gmat.id:")
+    print(system("wc -l Gmatrix/gmat.id | cat"))
+
+    coSel <- c(length(cohorts_to_use)-3,length(cohorts_to_use)-2,length(cohorts_to_use)-1,length(cohorts_to_use))
+    } else {
+    coSel <- coSel <- c(length(cohorts_to_use)-3,length(cohorts_to_use)-2,length(cohorts_to_use)-1,length(cohorts_to_use))
+    argument <- paste("head -n -", breedSize," Gmatrix/gmat.dat > Gmatrix/temp", sep="")
+    system(argument)
+    system("mv Gmatrix/temp Gmatrix/gmat.dat")
+    argument <- paste("head -n -", breedSize," Gmatrix/gmat.id > Gmatrix/temp", sep="")
+    system(argument)
+    system("mv Gmatrix/temp Gmatrix/gmat.id")
+    }
+
+for (co in cohorts_to_use[coSel]) {
+    print(paste("Writing genotypes for cohort",co))
+    genos = data.frame(t(get.geno(population, 
+                   cohorts = co,
+                   non.genotyped.as.missing = TRUE)))
+    genos <- genos[,markerIncluded]
     genos$ID <- row.names(genos)
-    # Assign correct recoded IDs
-    genos$RecodeID <- mapvalues(genos$ID,
-                                matc$ID,
-                                matc$RecodeID,
-                                warn_missing = FALSE)
-    # Move ID columns to the front.
-    genos <- genos %>% relocate(RecodeID,ID, .before = X1)
-    # Set missing genotypes to 9 (these are effect markers)
-    genos[is.na(genos)] <- 9
-    write.table(genos,"gmat.dat", 
-                row.names = FALSE, 
-                col.names = FALSE,
-                quote = FALSE, 
-                sep = " ")
+    genos$RecodeID <- mapvalues(genos$ID, matc$ID, matc$RecodeID, F)
+    genos <- genos %>% relocate(RecodeID,ID)
+    write.table(genos,
+            "Gmatrix/gmat.dat", 
+            append = TRUE,
+            row.names = FALSE, 
+            col.names = FALSE,
+            quote = FALSE, 
+            sep = " ")
     # make mapfile for GMATRIX
     # mapfile is simply the number of snps and a 0 or 1, depending on whether
     # the marker is genotyped or not
-      mapfile = cbind(seq(1,population$info$snp[1]*population$info$chromosome),
-                      rep(0,population$info$snp[1]*population$info$chromosome))
-      # This loop checks whether the marker is genotyped
-      # (I know that there is a more efficient way)
-      for (i in 1:dim(mapfile)[1]) {
-        if (markerIncluded[i]) {
-          mapfile[i,2] <- 1
-        }
-      }
-    write.table(cbind(mapfile,rep(1,dim(mapfile)[1])), 
-                "gmat.map",
-                row.names = FALSE, 
-                col.names = FALSE,
-                quote = F,
-                sep = " ")
+      mapfile = cbind(seq(1,sum(markerIncluded)),
+                      rep(1,sum(markerIncluded)))
     # Make id file for GMATRIX
     idfile <- cbind(genos$RecodeID,genos$RecodeID,rep(1,length(genos$RecodeID)))
-    # Should this code not be run? I don't remember what it does
-    # genotyped = get.genotyped(population, gen=1:length(population$breeding))
-    # for (i in 1:dim(idfile)[1]) {
-    #   if (genotyped[i]) {
-    #     idfile[i,3] <- 1
-    #   }
-    # }
+    rm(genos)
     write.table(idfile, 
-                "gmat.id",
-                row.names = FALSE, 
+                "Gmatrix/gmat.id",
+                append = TRUE,
+     	           row.names = FALSE, 
                 col.names = FALSE,
                 quote = F,
                 sep = " ")
+    }          
+print(paste("Writing of genotype data finished in ", (proc.time()-ptm)[1], " seconds, in generation ", gen, sep=""))
+
+print("Memory use of R for objects:")
+print(sort( sapply(ls(),function(x){object.size(get(x))}))[(length(sapply(ls(),function(x){object.size(get(x))}))-5):length(sapply(ls(),function(x){object.size(get(x))}))])	
+write.table(cbind(mapfile,rep(1,dim(mapfile)[1])),
+                "Gmatrix/gmat.map",
+                row.names = FALSE,
+                col.names = FALSE,
+                quote = F,
+                sep = " ")
+
+# write the necessary variances (I use the true values)
+   cohortsAll <- get.cohorts(population)
+   lenCo <- length(get.cohorts(population))
+
+varABase = sd(get.bv(population = population, cohorts=c("Cohort_1_M", "Cohort_1_F")))**2
+varEBase = ((1-h2)/h2)*varABase
+write.table(rbind(c(1,1,1, varABase),c(2,1,1,varEBase)),
+                "variances.txt",
+                row.names = FALSE,
+                col.names = FALSE,
+                quote = F,
+                sep = " ")
+
+singleS = "No"
+if (gen < (Pblupgen+1+numSS)) {
+      singleS = "Yes"
+      }
+system(paste("python3 gmatPar.py ", getwd(), " M1 ", singleS,  sep = ""))
+ptm <- proc.time()
+
+system(paste("bash DMU.sh", args[2], singleS, args[1], sep=" "))
+print(paste("Setting up of GRM and genetic evaluation completed in ", (proc.time()-ptm)[3]/60, " minutes, in generation ", gen, sep=""))
+
+#DMU ebvs are inserted back into MoBPS and extracted again for ocs computations (silly indeed).
+dmuBVE = data.frame(read.table("dmuSS.SOL", skip = 2, stringsAsFactors = F))
+#dmuBVE$V2 <- as.integer(dmuBVE$V2)
+
+# I have to remove some individuals from matc, to insert correct IDs.
+if (((Pblupgen + 1) * 3 + 1) < length(get.cohorts(population))) {
+  matcNotUse <- rownames(data.frame(get.id(population, cohorts = get.cohorts(population)[ c(seq(1,(Pblupgen+1)*3, by = 3),seq((Pblupgen+1)*3+1,length(get.cohorts(population)), by = 4))])))
+
+} else {
+matcNotUse <- rownames(data.frame(get.id(population, cohorts = get.cohorts(population)[seq(1,(Pblupgen+1)*3, by = 3)])))
+}
+
+matc_reduced <- matc[!(matc$ID %in% matcNotUse),]
+dmuBVE$V1 <- mapvalues(dmuBVE$V1, matc_reduced$RecodeID, matc_reduced$ID, F)
+
+population <- insert.bve(population, dmuBVE)
+#rm(dmuBVE)
+###############################################################################
+# Try OCS
+###############################################################################
+if (gen==Pblupgen+1) {
+  tempco <- c(paste("PBLUP",gen,"_M",sep=""),paste("PBLUP",gen,"_F",sep=""))
+  } else {
+  tempco <- c(paste("ssGBLUP",gen,"_M",sep=""),paste("ssGBLUP",gen,"_F",sep=""))
+  }
+
+  ped <- data.frame(get.pedigree(population, cohorts = tempco))
+  # Assign sex
+  # First assign all animals as 1 (males)
+  ped$sex = "1"
+  # Assign 2 to animals with F as their first letter
+  ped[substr(ped$offspring,1,1) == "F",]$sex = "2"
+  bve <- get.bve(population, cohorts = cohorts[c(cohIndex-1,cohIndex-2)])
+  rusl <- merge(matc, data.frame(t(bve)), by.x = "ID", by.y = "row.names", sort = F, all.x = TRUE)
+
+  ped$offspring <- mapvalues(ped$offspring, matc$ID, matc$RecodeID, warn_missing = F)
+  ped$mother <- mapvalues(ped$mother, matc$ID, matc$RecodeID, warn_missing = F)
+  ped$father <- mapvalues(ped$father, matc$ID, matc$RecodeID, warn_missing = F)
+
+  # The input to EVA, evaIn contains ped and ebvs.
+  # Use merge to combine ped and bve.
+  evaIn <- merge(ped, rusl, by.x = "offspring", by.y = "RecodeID", sort = F, all.x = TRUE)
+  rm(ped,bve,rusl)
+
+  #make dataframe of individual MoBPS IDs and IDs for EVA.
+  evaIn$mother <- 0
+  evaIn$father <- 0
+  evaIn$generation = 1
+  evaIn$maxmatings = 1
+  evaIn[is.na(evaIn$Trait.1),]$maxmatings=0
+  evaIn[is.na(evaIn$Trait.1),]$Trait.1=-900
+  evaIn[evaIn$Trait.1<median(evaIn[evaIn$sex==1 & evaIn$maxmatings==1,]$Trait.1) | evaIn$sex==2,]$maxmatings <- 0
+
+  #Only set bulls with EBV above the median as selection candidates.
+  evaIn[evaIn$sex==2,]$maxmatings = args[3]
+  evaIn = evaIn[c(1,2,3,4,7,8,6,5)]
+  colnames(evaIn)=c("ID", "sire", "dam", "sex" ,"generation", "maxmatings", "ebv","MoBPSID")
+  evaIn$ebv = round(evaIn$ebv, 4)
+  meanEBV=mean(evaIn[evaIn$sex== 2 & evaIn$maxmatings>0,]$ebv)  
+  # Remove the duplicated IDs of the genotyped animals. Make table with the duplicate IDs and put into variable.
+  tavle <- table(evaIn$ID)
+  Genotyped <- names(tavle[tavle==2])
+  if (length(population$breeding)> 9) {
+        higherGen <- max(substr(str_extract(evaIn$MoBPSID,"_..$"),2,3),na.rm=T)
+        ru <- (!(evaIn$ID %in% Genotyped& substr(str_extract(evaIn$MoBPSID,"_..$"),2,3)<higherGen))
+        ru[is.na(ru)] <- FALSE 
+        evaIn <- evaIn[ru,]
+      } else {
+        higherGen <- max(substr(str_extract(evaIn$MoBPSID,"_.$"),2,2),na.rm=T)
+        evaIn <- evaIn[!(evaIn$ID %in% Genotyped & substr(str_extract(evaIn$MoBPSID,"_.$"),2,2)<higherGen),]
+      }
+  # Write selection candidates before adding pseudofemale
+  write.table(evaIn[,c(1,4)], "SelCands",
+              quote = FALSE, sep = "\t",
+              row.names = FALSE, col.names = FALSE)
+  evaIn=rbind(evaIn[evaIn$sex==1,],c("00001","0","0",2,1,args[3],round(meanEBV,4),"PseudoFemale"))
+  write.table(evaIn, "evaIn.txt",
+              quote = FALSE, sep = "\t",
+              row.names = FALSE, col.names = FALSE)
+  rm(evaIn)
+  if (args[2]=="Ped") {
+  print("Writing Pedigree information")
+# Select the cohorts for which to write pedigree information
+if (gen==Pblupgen+1) {
+  tempco <- c(paste("PBLUP",gen,"_M",sep=""),paste("PBLUP",gen,"_F",sep=""))
+  } else{
+  tempco <- c(paste("ssGBLUP",gen,"_M",sep=""),paste("ssGBLUP",gen,"_F",sep=""))
+  }
+  bla = kinship.exp.store(population, cohorts = tempco, depth.pedigree = GBLUPgens)
+  newFile=matrix(0,ncol=3, nrow=dim(bla)[1]*(dim(bla)[1]-1)/2+dim(bla)[1])
+  count=1
+  for (i in 1:dim(bla)[1]) {
+    for (j in i:dim(bla)[1]) {
+      #print(paste(i,j))
+      newFile[count,1] = rownames(bla)[i]
+      newFile[count,2] = colnames(bla)[j]
+      newFile[count,3] = bla[i,j]
+      count = count + 1
+    }
+  }
+  rm(bla)
+  write.table(newFile,"ReducedMatrix", quote = F, row.names = F, col.names = F)
+  rm(newFile)
+  }
+# Write genotypes if marker-based GMATRIX is used
+  if (substr(args[2],1,1) == "M" | args[2]=="Ped") { 
+    # Here I retrieve the genotypes of desired cohorts
+# I have to remove the genotyped bulls + females from gmat.datm and replace with all bulls and females
+# Use head to remove the bulls and females
+RemoveBulls = breedSize/2+GenoSize
+argument <- paste("head -n -", RemoveBulls," Gmatrix/gmat.dat > Gmatrix/temp", sep="")
+system(argument)
+system("mv Gmatrix/temp Gmatrix/gmat.dat")
+argument <- paste("head -n -", RemoveBulls," Gmatrix/gmat.id > Gmatrix/temp", sep="")
+system(argument)
+system("mv Gmatrix/temp Gmatrix/gmat.id")
+
+# Now append the current generation 6000 males and 6000 females to the genotype data file
+if (gen==Pblupgen+1) {
+tempco <- c(paste("PBLUP",gen,"_M",sep=""),paste("PBLUP",gen,"_F",sep=""))
+} else{
+tempco <- c(paste("ssGBLUP",gen,"_M",sep=""),paste("ssGBLUP",gen,"_F",sep=""))
+}
+for (co in tempco) {
+print(paste("Writing genotypes for cohort",co))
+genos = data.frame(t(get.geno(population,
+                   cohorts = co,
+                   non.genotyped.as.missing = FALSE)))
+genos <- genos[,markerIncluded]
+genos$ID <- row.names(genos)
+genos$RecodeID <- mapvalues(genos$ID, matc$ID, matc$RecodeID, F)
+genos <- genos %>% relocate(RecodeID,ID)
+write.table(genos,
+            "Gmatrix/gmat.dat",
+            append = TRUE,
+            row.names = FALSE,
+            col.names = FALSE,
+            quote = FALSE,
+            sep = " ")
+    # Make id file for GMATRIX
+    idfile <- cbind(genos$RecodeID,genos$RecodeID,rep(1,length(genos$RecodeID)))
+    rm(genos)
+    write.table(idfile,
+                "Gmatrix/gmat.id",
+                append = TRUE,
+                row.names = FALSE,
+                col.names = FALSE,
+                quote = F,
+                sep = " ")
+}
+
+print("Memory use of R for objects:")
+print(sort( sapply(ls(),function(x){object.size(get(x))}))[(length(sapply(ls(),function(x){object.size(get(x))}))-5):length(sapply(ls(),function(x){object.size(get(x))}))])	
+rm(genos)
+
     if (args[2] == "M1D" || args[2] == "M2D") {
       # find the frequency of alleles in the base generation.
-      freqfile <-  get.geno(population, gen = 1, non.genotyped.as.missing = FALSE)
-      # rowMeans can be used to compute allele frequencies (for the larger allele)
-      freq <- rowMeans(freqfile)/2
-      write.table(freq[freq!=0], 
+      freqfile <-  get.geno(population, cohorts = c("PBLUP2_M","PBLUP2_F"), non.genotyped.as.missing = FALSE)
+      freqfile <- freqfile[markerIncluded,]
+    # rowMeans can be used to compute allele frequencies (for the larger allele)
+      freqfile <- rowMeans(freqfile)/2
+      freqfile <- cbind(seq(1,length(freqfile)),freqfile)
+      write.table(freqfile, 
                   "mapbase.dat",
-                  row.names = TRUE, 
+                  row.names = FALSE, 
                   col.names = FALSE,
                   quote = F,
                   sep = " ")
     }
     if (args[2] == "M1D_Est" || args[2] == "M2D_Est") {
-      # Now use the genotypes of older bulls. This uses the first three
-      # generations, should perhaps be changed.
+      # Now use the genotypes of older bulls. This uses the first generation of selected bulls.
       freqfile <-  get.geno(population, 
-                            cohorts = c(cohorts[c(1,3,5)]),
+                            cohorts = c(cohorts[c(1,3,5,7)]),
                             non.genotyped.as.missing = FALSE)
+      freqfile <- freqfile[markerIncluded,]
       # rowMeans can be used to compute allele frequencies (for the larger allele)
-      freq <- rowMeans(freqfile)/2
-      write.table(freq[freq!=0], 
+      freqfile <- rowMeans(freqfile)/2
+      freqfile <- cbind(seq(1,length(freqfile)),freqfile)
+      write.table(freqfile, 
                   "mapbase.dat",
-                  row.names = TRUE, 
+                  row.names = FALSE, 
                   col.names = FALSE,
                   quote = F,
                   sep = " ")
@@ -591,41 +657,34 @@ write.table(evaIn[,c(1,4,6)], "SelCands",
       freqfile <-  get.geno(population, 
                             cohorts = c(cohorts[cohIndex-1],cohorts[cohIndex-2]),
                             non.genotyped.as.missing = FALSE)
+      freqfile <- freqfile[markerIncluded,]
       # rowMeans can be used to compute allele frequencies (for the larger allele)
-      freq <- rowMeans(freqfile)/2
-      write.table(freq[freq!=0], 
+      freqfile <- rowMeans(freqfile)/2
+      freqfile <- cbind(seq(1,length(freqfile)),freqfile)
+      write.table(freqfile, 
                   "mapbase.dat",
-                  row.names = TRUE, 
+                  row.names = FALSE, 
                   col.names = FALSE,
                   quote = F,
                   sep = " ")
-    }    
+    }
+    if (args[2] == "M1_05" || args[2] == "M2_05") {
+      freqfile <- rep(0.5,sum(markerIncluded))
+      freqfile <- cbind(seq(1,sum(markerIncluded)),freqfile)
+      write.table(freqfile,
+                  "mapbase.dat",
+                  row.names = FALSE,
+                  col.names = FALSE,
+                  quote = F,
+                  sep = " ")
+    }
+    
   }
+rm(freqfile)
 
-# Write the haplotypes of genotyped animals if method is haplotype-based.
-# Here I have to take care of cohorts.
-if (substr(args[2],1,1) == "H") { 
-haplo=get.haplo(population, cohorts = cohorts[-c(2,4,6,8,10)],
-                non.genotyped.as.missing = TRUE)
-haplo[is.na(haplo)] <- 9
-print("Writing haplotypes")
-write.table(haplo,"haplo.hap", row.names = FALSE, col.names = FALSE,
-             quote = FALSE, sep = "\t")
-# Use stringr to replace _set1 and _set2 with ""
-id=colnames(haplo)
-id=str_replace(id,"_set[1-2]","")
-# Write sample IDs
-write.table(unique(id),"haplo.sample", row.names = FALSE, col.names = FALSE,
-            quote = FALSE, sep = "\t")
-# Make and write genetic map
-ma=get.map(population)
-ma=data.frame(ma[,1],ma[,2], population$info$snp.position,"A","C")
-write.table(ma, "haplo.map", row.names = FALSE, col.names = FALSE,
-            quote = FALSE, sep = "\t")
-rm(ma)
-rm(haplo)
-}
+ptm <- proc.time()
 system(paste("bash EVA.sh",args[1],args[2],args[3],sep = " "))
+print(paste("Setting up of GRM and optimum contribution computations completed in ", (proc.time()-ptm)[3]/60, " minutes, in generation ", gen, sep=""))
 
 EVAfilename = paste("evaSim/Candidates.txt",sep="")
 # Read the Candidates.txt file from EVA
@@ -641,7 +700,7 @@ print(paste("her er eg fyrir OCS urval, kynslod:", gen))
 # Assign huge breeding value estimate to selected bulls.
 dfBVE = cbind(df$txt, 1e9)
 population <- insert.bve(population, bves = dfBVE)
-
+rm(df)
 ##############################################################
 # Make R Data file. This is temporary
 #RDataFile <- paste(args[2],"/gen",gen,args[2],"_",args[1],"TempStuff.RData",sep="")
@@ -650,117 +709,96 @@ population <- insert.bve(population, bves = dfBVE)
 
 population <- breeding.diploid(population, 
                                breeding.size = breedSize,
-                               name.cohort = paste("ssGBLUP",gen, sep=""),
+                               name.cohort = paste("ssGBLUP",gen+1, sep=""),
                                selection.size = c(SelMales,SelFemales),
-                               heritability = 0.4,
+                               #heritability = 0.4,
                                selection.f.cohorts = cohorts[cohIndex-1],
                                selection.m.cohorts = cohorts[cohIndex-2],
                                selection.criteria = "bve",
                                max.mating.pair = 2,
+                               mutation.rate = 0,
+                               remutation.rate = 0,
+                               share.genotyped = 0,
+                               miraculix.cores = 4,
                                max.offspring = c(breedSize/SelMales,2))
+population <- insert.bve(population, dmuBVE)
+
+# Generate copies of selected bulls
+population <- breeding.diploid(population,
+                               selection.size = c(SelMales,SelFemales),
+                               copy.individual.m = TRUE,
+                               genotyped.array = 2,                                  
+                               selection.criteria = "bve",
+                               selection.f.cohorts = cohorts[cohIndex-1],
+                               selection.m.cohorts = cohorts[cohIndex-2],
+                               mutation.rate = 0,
+                               add.gen = length(population$breeding)-1,
+#                               delete.individual = length(population$breeding)-1,
+#                               delete.sex=1,
+                               remutation.rate = 0,
+                               name.cohort = paste("SelectedBulls",gen, sep=""))
+
+population <- clean.up(population)
+
 # Here I can decide whether to make new cohort of selected bulls,
 # to replace the cohort of genotyped bulls.
-a <- get.pedigree(population, cohorts = get.cohorts(population)[c(length(get.cohorts(population))-1,length(get.cohorts(population))-2)], raw=TRUE)
-png(paste(args[2],"_",args[2],"_",args[1],gen,".png",sep=""))
+#a <- get.pedigree(population, gen = length(population$breeding), raw=TRUE)
+#table(a[,6])	
+# Replave the ebvs with dmu ones.
+#rm(dmuBVE)
+   print(paste("write genomic information for generation",gen, sep = " "))
+   cohortsAll <- get.cohorts(population)
+   lenCo <- length(get.cohorts(population))
+if (gen == (Pblupgen+1)) {
+   lenCo <- lenCo+1
+}
+   mrg <- getHet(population,c(cohortsAll[lenCo-5], cohortsAll[lenCo-6]),qtl)
+   p_qtl[gen,] <- mrg$freq0
+   info[gen,1:7] <- getAll(mrg, gen, c(cohortsAll[lenCo-5], cohortsAll[lenCo-6]), population, funcSegQTL, func)
+   p_marker[gen,] <- get_p(population, c(cohortsAll[lenCo-5], cohortsAll[lenCo-6]), markerIncluded) 
+   p_neutral[gen,] <- get_p(population, c(cohortsAll[lenCo-5], cohortsAll[lenCo-6]), NeuList) 
 
-hist(a[,6], nclass=500, xlab="sire nr.", ylab="times used", main="Frequency of use for each sire")
-dev.off()
-	print(paste("write genomic information for generation",gen, sep = " "))
-        df=data.frame(get.effect.freq(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2])))
-        # info$real.bv.add : Lists with an overview of all single marker QTLs for each trait
-        head(population$info$real.bv.add[[1]][,c(1,3,4,5)])
-        # take out the effects
-        effects = data.frame(population$info$real.bv.add[[1]][,c(1,2,3,4,5)])
-        head(effects)
-        # change to character
-        effects$X1=effects$X1 + (effects$X2-1)*numMarkers
-        effects$X1=as.character(effects$X1)
-        effects = effects[,-2]
-        # find the frequencies.
-        head(df)
-        df$X1 = row.names(df)
-        # merge 
-        mrg = merge(effects, df, by = "X1")
-        mrg$freq1 = (mrg$Homo0*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        mrg$freq2 = (mrg$Homo1*2 + mrg$Hetero)/((mrg$Homo0+mrg$Hetero+mrg$Homo1)*2)
-        colnames(mrg) = c("SNP","Effect0", "EffectHet","Effect1", "Homo0","Hetero","Homo1","freq0","freq1")
-        p[gen,] <- mrg$freq0
-        info[gen,6] <- var(p[gen,]-p[gen-1,])
-        # print mean heterozygosity and store in info matrix.
-        print(c("mean heterozygosity of QTL, gen:", paste(gen), paste(mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1))))))
-        info[gen, 3] = mean(sum(mrg$Hetero)/(sum(mrg$Homo0+mrg$Hetero+mrg$Homo1)))
-        freq1=data.frame(mrg[,c(2,8)])
-        freq2=data.frame(mrg[,c(4,9)])
-        afi <- apply(mrg[,c(5,6,7)], MARGIN = 1, FUN = funcSegQTL)
-        sum(afi)
-        info[gen, 5] <- sum(afi)/qtl
-        # compute total heterozygosity of markers and number of fixed alleles
-        # Get genotypes: 
-        bl=get.geno(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        # Assign
-        fixSeg <- apply(bl, MARGIN = 1, FUN = func)
-        # Sum of fixSeg is the number of segregating alleles
-        sum(fixSeg)
-        # Put in percentage of alleles segregating.
-        info[gen,4] <- sum(fixSeg)/length(fixSeg)
-        colnames(freq1) = c("effect","frequency")
-        colnames(freq2) = c("effect","frequency")
-        dat = rbind(freq1,freq2)
-        #plot(dat$frequency,dat$effect)
-        # hist(dat$frequency, breaks = 100)
-        # Get kinship from IBD. 
-        info[gen,2] <- kinship.emp.fast(population = population,
-                                              cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]),
-                                              ibd.obs = breedSize/10,
-                                              hbd.obs = breedSize/10)[1]
-        bv <- get.bv(population, cohorts = c(cohorts[cohIndex-1], cohorts[cohIndex-2]))
-        info[gen,1] <- mean(bv)
+   info[gen,8] = F_drift(p_neutral, gen, Pblupgen)
+   info[gen,9] = F_hom(p_neutral, gen, Pblupgen)
+   info[gen,10] = F_drift(p_qtl, gen, Pblupgen)
+   info[gen,11] = F_hom(p_qtl, gen, Pblupgen)
+   info[gen,12] = F_drift(p_marker, gen, Pblupgen)
+   info[gen,13] = F_hom(p_marker, gen, Pblupgen)
 
-
+   info[gen,14] = sum(get.qtl.variance(population = population, cohorts=c(cohortsAll[lenCo-5], cohortsAll[lenCo-6]))[[1]][,3])
+   info[gen,15] = sd(get.bv(population = population, cohorts=c(cohortsAll[lenCo-5], cohortsAll[lenCo-6])))**2
+	rm(mrg)
+print(info)
 # Update cohortlist
-cohorts[cohIndex] =  paste("ssGBLUP",gen,"_M", sep="")
-cohorts[cohIndex+1] =  paste("ssGBLUP",gen,"_F", sep="")
+cohorts[cohIndex] =  paste("ssGBLUP",gen+1,"_M", sep="")
+cohorts[cohIndex+1] =  paste("ssGBLUP",gen+1,"_F", sep="")
+# Replace the previous cohort of genotyped bulls with the selected bulls.
+cohorts[cohIndex-2] =  paste("SelectedBulls",gen, sep="")
+		
 cohIndex =+ cohIndex+2
 print(paste("end of generation",gen, sep = " "))      
+#RDataFile <- paste(args[2],"_",args[1],gen,"PostGenomSel.RData",sep="")
+#save.image(file=RDataFile)
+write.table(round(info,4), file = paste(args[2],"_",args[1],"_info.txt",sep=""))
+print(paste("Genetic evaluation and selection completed in ", (proc.time()-ptmLong)[3]/3600, " hours, in generation ", gen, sep=""))
 }
 summary(population)
 RDataFile <- paste(args[2],"_",args[1],".RData",sep="")
 save.image(file=RDataFile)
 
-png(paste(args[2],"_",args[1],"_BVdev.png",sep=""))
-#bv.development(population,cohort=get.cohorts(population),display.cohort.name = TRUE)
-bv.development(population,gen=1:length(population$breeding),display.cohort.name = TRUE)
-dev.off()
-png(paste(args[2],"_",args[1],"_kinshipdev.png",sep=""))
-kinship.development(population, gen=1:length(population$breeding),display.cohort.name = TRUE, ibd.obs = 10000)
-dev.off()
+write.table(round(info,4), file = paste(args[2],"_",args[1],"_info.txt",sep=""))
+print("Writing QTL allele frequencies")
+write.table(round(p_qtl,4), file = paste(args[2],"_",args[1],"_p_qtl.txt",sep=""))
+print("Writing marker frequencies")
+write.table(round(p_marker,4), file = paste(args[2],"_",args[1],"_p_markers.txt",sep=""))
+print("Writing neutral loci frequencies")
+write.table(round(p_neutral,4), file = paste(args[2],"_",args[1],"_p_neutral.txt",sep=""))
+print("Writing QTL effects")
+#write.table(get.qtl.effects(population=population)[1], file = paste(args[2],"_",args[1],"_qtl_effects.txt",sep=""), row.names = F)
 
-png(paste(args[2],"_",args[1],"_BV.png",sep=""))
-plot(info$BV)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_Coancestry.png",sep=""))
-plot(info$Coancestry)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_Heteroz.png",sep=""))
-plot(info$Heteroz)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_SegAlleles.png",sep=""))
-plot(info$SegQTL)
-dev.off()
-
-png(paste(args[2],"_",args[1],"_DriftVariance.png",sep=""))
-plot(info$DriftVar)
-dev.off()
-
-
-qt <- get.qtl.variance(population, gen = 1:length(population$breeding))
-qt=data.frame(qt)
-tail(qt)
-head(qt)
-write.table(qt, paste(args[2],"_",args[1],"_qt.txt",sep=""), quote = F, sep = "\t")
-write.table(info, file = paste(args[2],"_",args[1],"_info.txt",sep=""))
-
-write.table(p, file = paste(args[2],"_",args[1],"_p.txt",sep=""))
+#qt <- get.qtl.variance(population, gen = 1:length(population$breeding))
+#qt=data.frame(qt)
+#tail(qt)
+#head(qt)
+#write.table(qt, paste(args[2],"_",args[1],"_qt.txt",sep=""), quote = F, sep = "\t")
+system("rm Gmatrix/gmat.dat Gmatrix/gmat Gmatrix/invgmat Gmatrix.gmat ReducedMatrix")

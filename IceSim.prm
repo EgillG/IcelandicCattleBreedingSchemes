@@ -1,0 +1,388 @@
+/* 
+Builds historical population
+
+*/
+
+/*******************************
+ **     Global parameters     **
+ *******************************/
+title = "Simulation of Icelandic Dairy Cattle";
+nrep  =10;                    //Number of replicates
+h2    = 0.4;                  //Heritability
+qtlh2 = 0.4;                  //QTL heritability
+phvar = 1.0;                  //Phenotypic variance
+nthread = 2;
+no_male_rec;
+/*******************************
+ **   Historical population   **
+ *******************************/
+// Use the same as in other papers
+begin_hp;
+   hg_size = 2000 [0]          //Size of the historical generations
+             2000 [2000]  
+             200 [2100]   
+             1000 [2200]  
+             12000 [2201];
+   nmlhg   = 6000;              //Number of males in the last generation
+end_hp;
+
+/*******************************
+ **        Populations        **
+ *******************************/
+
+begin_pop = "PBLUP";
+   begin_founder;
+      male   [n = 6000, pop = "hp"];
+      female [n = 6000, pop = "hp"];
+   end_founder;
+   ls  = 1;                 //Litter size
+   ng  = 1;                 //Number of generations
+   md  = rnd;               //Mating design
+   sr  = 1.0;               //Replacement ratio for sires: Discrete generations
+   dr  = 0.5;               //Replacement ratio for dams:  50% replaced
+   cd  = age;
+   pmp = 0.5 /fix;          //Proportion of male progeny
+   begin_popoutput;
+        data;
+        stat;
+        genotype /snp_code /gen 0;
+        allele_freq;
+        ld;
+   end_popoutput;
+end_pop;
+
+/*******************************
+ **          Genome           **
+ *******************************/
+begin_genome; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr; begin_chr = 1;							//Chromosome id
+    	chrlen = 100;						//Chromosome lenght
+    	nmloci =1800;						//Number of marker loci on the chromosome
+    	mpos   = even;						//Markers positions
+    	nma    = all 2;						//Number of marker alleles
+    	maf    = eql;						//Initial frequency of marker alleles
+    	nqloci = 500;						//Number of QTL loci
+    	qpos   = rnd;						//QTLs positions
+    	nqa    = all 2;						//Number of QTL alleles
+    	qaf    = eql;						//Initial frequency of QTL alleles
+    	qae    = rndg 0.4;					//Distribution of QTL allele effects
+     end_chr;    mmutr     = 2.5e-5 /recurrent; 	//Marker mutation rate
+   qmutr     = 2.5e-5;            				//QTL mutation rate
+end_genome;
+
+
+/*******************************
+ **       Output options      **
+ *******************************/
+begin_output;
+   linkage_map;
+end_output;
+
+/ 
